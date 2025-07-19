@@ -110,6 +110,7 @@ async function sendData(action, sheetName, data, fileInput, event) {
   }
 }
 
+// --- PERUBAHAN DI SINI ---
 // Fungsi untuk memuat semua data awal dari Google Sheet
 async function loadInitialData() {
     if (SCRIPT_URL.includes("URL_WEB_APP_APPS_SCRIPT_ANDA")) {
@@ -125,7 +126,11 @@ async function loadInitialData() {
                 if (key !== 'settings' && result.data[key]) currentData[key] = result.data[key];
             }
             showMessage("Data berhasil dimuat.", "success");
+            
+            // Setelah semua data ada, perbarui semua UI
             updateDashboard();
+            updateAllSummaries(); // Panggil fungsi baru ini
+            
             showContentPage('dashboard');
         } else { throw new Error(result.message); }
     } catch (error) {
@@ -133,6 +138,24 @@ async function loadInitialData() {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     }
 }
+
+// --- FUNGSI BARU ---
+// Fungsi untuk memperbarui semua tabel ringkasan sekaligus
+function updateAllSummaries() {
+    updateLeadsSummary();
+    updateCanvasingSummary();
+    updatePromosiSummary();
+    updateDoorToDoorSummary();
+    updateQuotationsSummary();
+    updateSurveysSummary();
+    updateReportsSummary();
+    updateCRMSurveysSummary();
+    updateConversionsSummary();
+    updateEventsSummary();
+    updateCampaignsSummary();
+    updateAdministrasiSummary();
+}
+// --- AKHIR PERUBAHAN ---
 
 // --- FUNGSI-FUNGSI FORM HANDLER ---
 function handleLeadForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, customerName: formData.get('customerName'), leadSource: formData.get('leadSource'), product: formData.get('product'), contact: formData.get('contact'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString() }; sendData('saveData', 'Leads', data, null, e); }
@@ -160,7 +183,6 @@ function getCurrentDateString() {
     return `${year}-${month}-${day}`;
 }
 
-// --- FUNGSI BARU UNTUK TIMESTAMP LOKAL ---
 function getLocalTimestampString() {
     const now = new Date();
     const year = now.getFullYear();
@@ -169,13 +191,10 @@ function getLocalTimestampString() {
     const hours = now.getHours().toString().padStart(2, '0');
     const minutes = now.getMinutes().toString().padStart(2, '0');
     const seconds = now.getSeconds().toString().padStart(2, '0');
-    
-    // Membuat string offset timezone, misal: +07:00
     const timezoneOffset = -now.getTimezoneOffset();
     const offsetSign = timezoneOffset >= 0 ? '+' : '-';
     const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60).toString().padStart(2, '0');
     const offsetMinutes = (Math.abs(timezoneOffset) % 60).toString().padStart(2, '0');
-    
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetSign}${offsetHours}:${offsetMinutes}`;
 }
 
@@ -190,7 +209,7 @@ function showContentPage(pageId) {
   document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
   const navLink = document.querySelector(`[data-page="${pageId}"]`);
   if (navLink) navLink.classList.add('active');
-  loadPageData(pageId);
+  // Tidak perlu memanggil loadPageData di sini lagi karena sudah ditangani oleh updateAllSummaries
 }
 
 function updateDateTime() {
@@ -227,7 +246,14 @@ window.toggleSetting = function(targetId) { currentData.settings[targetId] = !cu
 
 // --- EVENT LISTENERS & INISIALISASI ---
 function showMessage(message, type = 'info') { const notification = document.createElement('div'); notification.className = `message ${type}`; notification.textContent = message; const mainContent = document.querySelector('.main-content'); if(mainContent) { mainContent.insertBefore(notification, mainContent.firstChild); setTimeout(() => { notification.remove(); }, 4000); } }
-function loadPageData(pageId) { const functionName = `update${pageId.replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')}Summary`; if (typeof window[functionName] === 'function') { window[functionName](); } if (pageId === 'crm-survey') { const salesNameField = document.querySelector('#crm-survey input[name="salesName"]'); if (salesNameField && currentUser) salesNameField.value = currentUser.name; } }
+function loadPageData(pageId) { 
+    // Fungsi ini sekarang hanya untuk logika spesifik halaman jika ada,
+    // karena pembaruan tabel sudah ditangani oleh updateAllSummaries.
+    if (pageId === 'crm-survey') { 
+        const salesNameField = document.querySelector('#crm-survey input[name="salesName"]'); 
+        if (salesNameField && currentUser) salesNameField.value = currentUser.name; 
+    } 
+}
 
 function setupFormListeners() {
     const forms = {
