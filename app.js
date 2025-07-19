@@ -61,7 +61,8 @@ function toBase64(file) {
   });
 }
 
-// Fungsi untuk mengirim data ke Google Apps Script
+// --- PERUBAHAN UTAMA DI SINI ---
+// Fungsi untuk mengirim data ke Google Apps Script dengan penanganan error yang lebih baik
 async function sendData(action, sheetName, data, fileInput, event) {
   const button = event.target.querySelector('button[type="submit"]');
   const originalButtonText = button.innerHTML;
@@ -78,11 +79,24 @@ async function sendData(action, sheetName, data, fileInput, event) {
   }
 
   try {
+    console.log("Mengirim data ke server...", { sheetName, data }); // Log data yang dikirim
     const response = await fetch(SCRIPT_URL, {
       method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
-    const result = await response.json();
+
+    console.log("Menerima respons dari server:", response); // Log objek respons mentah
+
+    if (!response.ok) {
+        // Menangani error HTTP seperti 404, 500, dll.
+        throw new Error(`Server merespons dengan status: ${response.status}`);
+    }
+
+    const resultText = await response.text(); // Baca sebagai teks dulu untuk debug
+    console.log("Teks respons mentah dari server:", resultText);
+
+    const result = JSON.parse(resultText); // Coba parse JSON
+
     if (result.status === 'success') {
       showMessage('Data berhasil disimpan!', 'success');
       if (!currentData[sheetName.toLowerCase()]) currentData[sheetName.toLowerCase()] = [];
@@ -91,10 +105,13 @@ async function sendData(action, sheetName, data, fileInput, event) {
       if (typeof updateFunction === 'function') updateFunction();
       updateDashboard();
       event.target.reset();
-    } else { throw new Error(result.message); }
+    } else {
+      // Jika status dari Apps Script adalah 'error'
+      throw new Error(result.message || 'Terjadi kesalahan di server Apps Script.');
+    }
   } catch (error) {
-    console.error('Error sending data:', error);
-    showMessage(`Gagal mengirim data: ${error.message}`, 'error');
+    console.error('Error di dalam fungsi sendData:', error);
+    showMessage(`Gagal mengirim data: ${error.message}. Cek console (F12) untuk detail.`, 'error');
   } finally {
     button.innerHTML = originalButtonText;
     button.disabled = false;
