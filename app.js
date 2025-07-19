@@ -125,18 +125,7 @@ async function loadInitialData() {
 }
 
 // --- FUNGSI-FUNGSI FORM HANDLER ---
-function handleLeadForm(e) {
-  e.preventDefault();
-  if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; }
-  const formData = new FormData(e.target);
-  const data = {
-    id: Date.now(), sales: currentUser.username, customerName: formData.get('customerName'),
-    leadSource: formData.get('leadSource'), product: formData.get('product'),
-    contact: formData.get('contact'), notes: formData.get('notes'),
-    date: getCurrentDateString(), timestamp: new Date().toISOString()
-  };
-  sendData('saveData', 'Leads', data, null, e);
-}
+function handleLeadForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, customerName: formData.get('customerName'), leadSource: formData.get('leadSource'), product: formData.get('product'), contact: formData.get('contact'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: new Date().toISOString() }; sendData('saveData', 'Leads', data, null, e); }
 function handleCanvasingForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, meetingTitle: formData.get('meetingTitle'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: new Date().toISOString() }; sendData('saveData', 'Canvasing', data, e.target.querySelector('input[type="file"]'), e); }
 function handlePromosiForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, campaignName: formData.get('campaignName'), platform: formData.get('platform'), date: getCurrentDateString(), timestamp: new Date().toISOString() }; sendData('saveData', 'Promosi', data, e.target.querySelector('input[type="file"]'), e); }
 function handleDoorToDoorForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, visitDate: formData.get('visitDate'), institutionName: formData.get('institutionName'), address: formData.get('address'), picName: formData.get('picName'), picPhone: formData.get('picPhone'), response: formData.get('response'), timestamp: new Date().toISOString() }; sendData('saveData', 'DoorToDoor', data, e.target.querySelector('input[type="file"]'), e); }
@@ -149,79 +138,33 @@ function handleEventForm(e) { e.preventDefault(); const formData = new FormData(
 function handleCampaignForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, campaignTitle: formData.get('campaignTitle'), targetMarket: formData.get('targetMarket'), campaignDate: formData.get('campaignDate'), conceptDescription: formData.get('conceptDescription'), potentialConversion: formData.get('potentialConversion'), budget: formData.get('budget'), timestamp: new Date().toISOString() }; sendData('saveData', 'Campaigns', data, e.target.querySelector('input[type="file"]'), e); }
 
 // --- FUNGSI UTILITY & MANAJEMEN ---
-function initializeSettings() {
-  const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets];
-  allTargets.forEach(target => { currentData.settings[target.id] = true; });
-}
+function initializeSettings() { const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets]; allTargets.forEach(target => { currentData.settings[target.id] = true; }); }
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount); }
 function formatDate(date) { if (!(date instanceof Date)) date = new Date(date); return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
 function getCurrentDateString() { return new Date().toISOString().split('T')[0]; }
 function isWithinCutoffTime() { return new Date().getHours() < 16; }
 
-function logout() {
-    // Hapus data pengguna dari localStorage
-    localStorage.removeItem('currentUser');
-    // Arahkan kembali ke halaman login
-    window.location.href = 'index.html';
-}
+function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
 
 function showContentPage(pageId) {
   document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
   const pageElement = document.getElementById(pageId);
-  if (pageElement) {
-    pageElement.classList.add('active');
-  }
+  if (pageElement) pageElement.classList.add('active');
   document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
   const navLink = document.querySelector(`[data-page="${pageId}"]`);
-  if (navLink) {
-    navLink.classList.add('active');
-  }
+  if (navLink) navLink.classList.add('active');
   loadPageData(pageId);
 }
 
 function updateDateTime() {
   const now = new Date();
   const dateTimeElement = document.getElementById('currentDateTime');
-  if(dateTimeElement) {
-    dateTimeElement.textContent = now.toLocaleString('id-ID', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-  }
+  if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 // --- FUNGSI DASHBOARD & KALKULASI ---
-function updateDashboard() { 
-    if (!currentUser) return; 
-    const userDisplay = document.getElementById('userDisplayName');
-    if(userDisplay) userDisplay.textContent = currentUser.name; 
-    
-    const today = getCurrentDateString(); 
-    const weekStart = getWeekStart(); 
-    const monthStart = getMonthStart(); 
-    const dailyAchieved = calculateDailyAchievements(today); 
-    const weeklyAchieved = calculateWeeklyAchievements(weekStart); 
-    const monthlyAchieved = calculateMonthlyAchievements(monthStart); 
-    const dailyTotal = appData.daily_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); 
-    const weeklyTotal = appData.weekly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); 
-    const monthlyTotal = appData.monthly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); 
-    
-    updateProgressBar('daily', dailyAchieved, dailyTotal); 
-    updateProgressBar('weekly', weeklyAchieved, weeklyTotal); 
-    updateProgressBar('monthly', monthlyAchieved, monthlyTotal); 
-    updateTargetBreakdown(); 
-}
-function updateProgressBar(type, achieved, total) { 
-    const percentage = total > 0 ? Math.round((achieved / total) * 100) : 0; 
-    const progressFill = document.getElementById(`${type}Progress`);
-    const percentageText = document.getElementById(`${type}Percentage`);
-    const achievedText = document.getElementById(`${type}Achieved`);
-    const totalText = document.getElementById(`${type}Total`);
-
-    if(progressFill) progressFill.style.width = `${percentage}%`; 
-    if(percentageText) percentageText.textContent = `${percentage}%`; 
-    if(achievedText) achievedText.textContent = achieved; 
-    if(totalText) totalText.textContent = total; 
-}
+function updateDashboard() { if (!currentUser) return; const userDisplay = document.getElementById('userDisplayName'); if(userDisplay) userDisplay.textContent = currentUser.name; const today = getCurrentDateString(); const weekStart = getWeekStart(); const monthStart = getMonthStart(); const dailyAchieved = calculateDailyAchievements(today); const weeklyAchieved = calculateWeeklyAchievements(weekStart); const monthlyAchieved = calculateMonthlyAchievements(monthStart); const dailyTotal = appData.daily_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); const weeklyTotal = appData.weekly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); const monthlyTotal = appData.monthly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); updateProgressBar('daily', dailyAchieved, dailyTotal); updateProgressBar('weekly', weeklyAchieved, weeklyTotal); updateProgressBar('monthly', monthlyAchieved, monthlyTotal); updateTargetBreakdown(); }
+function updateProgressBar(type, achieved, total) { const percentage = total > 0 ? Math.round((achieved / total) * 100) : 0; const progressFill = document.getElementById(`${type}Progress`); const percentageText = document.getElementById(`${type}Percentage`); const achievedText = document.getElementById(`${type}Achieved`); const totalText = document.getElementById(`${type}Total`); if(progressFill) progressFill.style.width = `${percentage}%`; if(percentageText) percentageText.textContent = `${percentage}%`; if(achievedText) achievedText.textContent = achieved; if(totalText) totalText.textContent = total; }
 function getFilteredData(dataType) { const data = currentData[dataType] || []; return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.username); }
 function calculateDailyAchievements(date) { const leadsToday = getFilteredData('leads').filter(l => l.date && l.date.startsWith(date)).length; const promosiToday = getFilteredData('promosi').filter(p => p.date && p.date.startsWith(date)).length; return leadsToday + promosiToday; }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
@@ -265,6 +208,8 @@ async function loadContentTemplates() {
         const templates = document.getElementById('content-templates');
         
         if (mainContent && templates) {
+            // Hapus semua konten yang mungkin ada sebelumnya
+            mainContent.innerHTML = '';
             templates.querySelectorAll('.content-page').forEach(page => {
                 mainContent.appendChild(page.cloneNode(true));
             });
