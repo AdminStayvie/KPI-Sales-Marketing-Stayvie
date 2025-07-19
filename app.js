@@ -150,6 +150,7 @@ function login(username, password) {
 function logout() {
     currentUser = null;
     document.body.removeAttribute('data-role');
+    document.body.dataset.appListeners = 'false'; // Reset listener flag
     showPage('loginPage');
 }
 
@@ -209,7 +210,7 @@ function renderSummaryTable(containerId, data, columns, emptyMessage) {
             let value = entry[col.key] || '-';
             if (col.key.toLowerCase().includes('date') && value !== '-') value = formatDate(new Date(value));
             if (col.key.toLowerCase().includes('amount') || col.key.toLowerCase().includes('value') || col.key.toLowerCase().includes('budget')) value = formatCurrency(Number(value));
-            if (col.key.toLowerCase().includes('link') && value.startsWith('http')) value = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File</a>`;
+            if (col.key.toLowerCase().includes('link') && value && value.startsWith('http')) value = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File</a>`;
             row += `<td>${value}</td>`;
         });
         row += '</tr>';
@@ -271,7 +272,6 @@ function loadPageData(pageId) {
 // ===================================================================================
 
 function setupAppEventListeners() {
-    // Cek agar tidak duplikat event listener
     if (document.body.dataset.appListeners === 'true') return;
     document.body.dataset.appListeners = 'true';
 
@@ -283,7 +283,6 @@ function setupAppEventListeners() {
         });
     });
 
-    // --- FORM LISTENERS ---
     document.getElementById('leadForm')?.addEventListener('submit', e => { e.preventDefault(); handleFormSubmit(e.target, 'KPI-Entries', fd => ({ 'Kategori': 'Input Lead', 'Nama Customer / Perusahaan': fd.get('customerName'), 'Sumber Lead': fd.get('leadSource'), 'Produk yang Diminati': fd.get('product'), 'No Kontak': fd.get('contact'), 'Catatan Awal': fd.get('notes') })); });
     document.getElementById('canvasingForm')?.addEventListener('submit', e => { e.preventDefault(); handleFormSubmit(e.target, 'KPI-Entries', fd => ({ 'Kategori': 'Upload Meeting Canvasing', 'Judul Meeting': fd.get('meetingTitle'), 'Catatan': fd.get('notes') }), { inputName: 'document', linkKey: 'Link File' }); });
     document.getElementById('promosiForm')?.addEventListener('submit', e => { e.preventDefault(); handleFormSubmit(e.target, 'KPI-Entries', fd => ({ 'Kategori': 'Upload Promosi Campaign', 'Nama Campaign': fd.get('campaignName'), 'Platform': fd.get('platform') }), { inputName: 'screenshot', linkKey: 'Link Screenshot' }); });
