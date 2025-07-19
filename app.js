@@ -117,6 +117,8 @@ async function loadInitialData() {
             }
             showMessage("Data berhasil dimuat.", "success");
             updateDashboard();
+            // Memuat summary untuk halaman pertama kali
+            showContentPage('dashboard');
         } else { throw new Error(result.message); }
     } catch (error) {
         console.error('Error loading initial data:', error);
@@ -192,38 +194,6 @@ window.toggleSetting = function(targetId) { currentData.settings[targetId] = !cu
 function showMessage(message, type = 'info') { const notification = document.createElement('div'); notification.className = `message ${type}`; notification.textContent = message; const mainContent = document.querySelector('.main-content'); if(mainContent) { mainContent.insertBefore(notification, mainContent.firstChild); setTimeout(() => { notification.remove(); }, 4000); } }
 function loadPageData(pageId) { const functionName = `update${pageId.replace(/-/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')}Summary`; if (typeof window[functionName] === 'function') { window[functionName](); } if (pageId === 'crm-survey') { const salesNameField = document.querySelector('#crm-survey input[name="salesName"]'); if (salesNameField && currentUser) salesNameField.value = currentUser.name; } }
 
-async function loadContentTemplates() {
-    try {
-        const response = await fetch('content.html');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const text = await response.text();
-        const contentTemplates = document.getElementById('content-templates');
-        if (contentTemplates) {
-            contentTemplates.innerHTML = text;
-        }
-        
-        const mainContent = document.querySelector('.main-content');
-        const templates = document.getElementById('content-templates');
-        
-        if (mainContent && templates) {
-            // Hapus semua konten yang mungkin ada sebelumnya
-            mainContent.innerHTML = '';
-            templates.querySelectorAll('.content-page').forEach(page => {
-                mainContent.appendChild(page.cloneNode(true));
-            });
-        }
-        
-        setupFormListeners();
-        showContentPage('dashboard');
-
-    } catch (error) {
-        console.error('Gagal memuat template konten:', error);
-        showMessage('Gagal memuat konten aplikasi. Pastikan file content.html ada.', 'error');
-    }
-}
-
 function setupFormListeners() {
     const forms = {
         'leadForm': handleLeadForm, 'canvasingForm': handleCanvasingForm,
@@ -248,9 +218,11 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDateTime();
     setInterval(updateDateTime, 60000);
 
-    loadContentTemplates().then(() => {
-        loadInitialData();
-    });
+    // Langsung pasang listener karena semua elemen sudah ada di DOM
+    setupFormListeners();
+    
+    // Muat data dari server
+    loadInitialData();
 
     const logoutBtn = document.getElementById('logoutBtn');
     if(logoutBtn) logoutBtn.addEventListener('click', logout);
