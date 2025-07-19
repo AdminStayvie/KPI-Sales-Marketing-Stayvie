@@ -151,7 +151,17 @@ function handleCampaignForm(e) { e.preventDefault(); const formData = new FormDa
 function initializeSettings() { const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets]; allTargets.forEach(target => { currentData.settings[target.id] = true; }); }
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount); }
 function formatDate(date) { if (!(date instanceof Date)) date = new Date(date); return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
-function getCurrentDateString() { return new Date().toISOString().split('T')[0]; }
+
+// --- PERUBAHAN DI SINI ---
+function getCurrentDateString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0'); // Ditambah 1 karena bulan dimulai dari 0
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+// --- AKHIR PERUBAHAN ---
+
 function isWithinCutoffTime() { return new Date().getHours() < 16; }
 
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
@@ -169,7 +179,7 @@ function showContentPage(pageId) {
 function updateDateTime() {
   const now = new Date();
   const dateTimeElement = document.getElementById('currentDateTime');
-  if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
 }
 
 // --- FUNGSI DASHBOARD & KALKULASI ---
