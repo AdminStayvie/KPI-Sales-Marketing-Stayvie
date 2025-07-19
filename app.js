@@ -61,7 +61,6 @@ function toBase64(file) {
   });
 }
 
-// --- PERUBAHAN UTAMA DI SINI ---
 // Fungsi untuk mengirim data ke Google Apps Script dengan penanganan error yang lebih baik
 async function sendData(action, sheetName, data, fileInput, event) {
   const button = event.target.querySelector('button[type="submit"]');
@@ -79,23 +78,17 @@ async function sendData(action, sheetName, data, fileInput, event) {
   }
 
   try {
-    console.log("Mengirim data ke server...", { sheetName, data }); // Log data yang dikirim
     const response = await fetch(SCRIPT_URL, {
       method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
 
-    console.log("Menerima respons dari server:", response); // Log objek respons mentah
-
     if (!response.ok) {
-        // Menangani error HTTP seperti 404, 500, dll.
         throw new Error(`Server merespons dengan status: ${response.status}`);
     }
 
-    const resultText = await response.text(); // Baca sebagai teks dulu untuk debug
-    console.log("Teks respons mentah dari server:", resultText);
-
-    const result = JSON.parse(resultText); // Coba parse JSON
+    const resultText = await response.text();
+    const result = JSON.parse(resultText);
 
     if (result.status === 'success') {
       showMessage('Data berhasil disimpan!', 'success');
@@ -106,7 +99,6 @@ async function sendData(action, sheetName, data, fileInput, event) {
       updateDashboard();
       event.target.reset();
     } else {
-      // Jika status dari Apps Script adalah 'error'
       throw new Error(result.message || 'Terjadi kesalahan di server Apps Script.');
     }
   } catch (error) {
@@ -134,7 +126,6 @@ async function loadInitialData() {
             }
             showMessage("Data berhasil dimuat.", "success");
             updateDashboard();
-            // Memuat summary untuk halaman pertama kali
             showContentPage('dashboard');
         } else { throw new Error(result.message); }
     } catch (error) {
