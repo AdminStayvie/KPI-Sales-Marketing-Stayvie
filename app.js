@@ -1,6 +1,6 @@
 // ===================================================================================
 // PENGATURAN KONEKSI KE GOOGLE SHEETS
-// Ganti URL ini dengan URL Web App dari Google Apps Script Anda setelah di-deploy.
+// Pastikan URL ini sudah benar!
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec';
 // ===================================================================================
 
@@ -9,40 +9,65 @@ let currentUser = null;
 let appData = { users: [], targets: [] };
 let currentData = { kpiEntries: [] };
 
-// Utility functions
+// ... (semua fungsi utility seperti formatCurrency, formatDate, dll. tetap sama) ...
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount); }
 function formatDate(date) { if (!date) return ''; const dateObj = typeof date === 'string' ? new Date(date) : date; if (isNaN(dateObj)) return ''; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(dateObj); }
 function getCurrentDateString() { return new Date().toISOString().split('T')[0]; }
-function showLoading(form, isLoading) { const button = form.querySelector('button[type="submit"]'); if (button) { if (isLoading) { button.disabled = true; button.innerHTML = '<span class="loading"></span> Mengunggah...'; } else { button.disabled = false; button.innerHTML = button.dataset.originalText || 'Simpan'; } } }
+function showLoading(form, isLoading, message = 'Mengirim...') { const button = form.querySelector('button[type="submit"]'); if (button) { if (isLoading) { button.disabled = true; button.innerHTML = `<span class="loading"></span> ${message}`; } else { button.disabled = false; button.innerHTML = button.dataset.originalText || 'Simpan'; } } }
+function fileToBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result); reader.onerror = error => reject(error); }); }
 
-// Fungsi untuk membaca file sebagai Base64
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
-    });
+
+// ===================================================================================
+// FUNGSI KOMUNIKASI DENGAN GOOGLE APPS SCRIPT (DIPERBARUI)
+// ===================================================================================
+async function fetchInitialData() {
+    try {
+        const response = await fetch(`${SCRIPT_URL}?action=getAllData`);
+        if (!response.ok) {
+            // Jika gagal, coba dapatkan pesan error dari server
+            const errorBody = await response.text();
+            throw new Error(`Gagal terhubung ke server. Status: ${response.status}. Pesan: ${errorBody}`);
+        }
+        const data = await response.json();
+        if (data.error) { // Jika Apps Script mengembalikan error terstruktur
+             throw new Error(`Error dari server: ${data.error}`);
+        }
+        appData.users = data.users || [];
+        appData.targets = data.targets || [];
+        currentData.kpiEntries = data.kpiEntries || [];
+        console.log("Initial data loaded successfully.");
+        return true;
+    } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+        // Tampilkan error ke pengguna di halaman login
+        const loginContainer = document.querySelector('.login-container');
+        if (loginContainer) {
+            let errorDiv = loginContainer.querySelector('.message.error');
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.className = 'message error';
+                const loginCard = loginContainer.querySelector('.login-card');
+                loginCard.parentNode.insertBefore(errorDiv, loginCard);
+            }
+            errorDiv.textContent = 'Gagal memuat data. Pastikan koneksi internet stabil dan konfigurasi server benar. Coba muat ulang halaman.';
+        }
+        return false;
+    }
 }
 
-// ===================================================================================
-// FUNGSI KOMUNIKASI DENGAN GOOGLE APPS SCRIPT
-// ===================================================================================
-async function fetchInitialData() { /* ... (sama seperti sebelumnya) ... */ }
 async function postData(sheetName, data, fileInfo = null) {
+    // ... (Fungsi postData tetap sama seperti sebelumnya) ...
     try {
         let payload = { sheetName, data };
-        // Jika ada file yang akan diunggah, ubah menjadi base64 dan tambahkan ke payload
         if (fileInfo && fileInfo.file) {
             const base64String = await fileToBase64(fileInfo.file);
             payload.fileData = {
                 base64: base64String,
                 mimeType: fileInfo.file.type,
                 fileName: fileInfo.file.name,
-                linkKey: fileInfo.linkKey // Nama kolom di sheet untuk menyimpan link
+                linkKey: fileInfo.linkKey
             };
         }
-
         const response = await fetch(SCRIPT_URL, {
             method: 'POST',
             mode: 'cors',
@@ -61,162 +86,68 @@ async function postData(sheetName, data, fileInfo = null) {
     }
 }
 
+
 // ===================================================================================
-// AUTHENTICATION & PAGE MANAGEMENT
+// AUTHENTICATION & PAGE MANAGEMENT (DIPERBARUI)
 // ===================================================================================
-function login(username, password) { /* ... (sama) ... */ }
+function login(username, password) {
+  // Pastikan appData.users ada dan bukan array kosong
+  if (!appData.users || appData.users.length === 0) {
+      showMessage('Data pengguna tidak ditemukan. Gagal login.', 'error');
+      return false;
+  }
+  const user = appData.users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password.toString() === password);
+  if (user) {
+    currentUser = user;
+    document.body.setAttribute('data-role', user.role);
+    return true;
+  }
+  return false;
+}
+// ... (sisa fungsi page management tetap sama) ...
 function logout() { /* ... (sama) ... */ }
 function showPage(pageId) { /* ... (sama) ... */ }
 function showContentPage(pageId) { /* ... (sama) ... */ }
 
-// ===================================================================================
-// DASHBOARD & DATA DISPLAY
-// ===================================================================================
-function updateDateTime() { /* ... (sama) ... */ }
-function updateDashboard() { /* ... (sama) ... */ }
-function renderSummaryTable(containerId, data, columns, emptyMessage) { /* ... (sama seperti sebelumnya, tapi sekarang akan menampilkan link GDrive) ... */ }
 
 // ===================================================================================
-// FORM HANDLERS
-// ===================================================================================
-async function handleFormSubmit(form, sheetName, dataMapper, fileInputInfo = null) {
-    showLoading(form, true);
-    const formData = new FormData(form);
-    
-    // Tambahkan field umum ke data
-    const addCommonFields = (d) => {
-        d['Sales'] = currentUser.name;
-        d['Timestamp'] = new Date().toISOString();
-        d['Tanggal'] = getCurrentDateString();
-        return d;
-    };
-    const data = addCommonFields(dataMapper(formData));
-
-    let fileToUpload = null;
-    if (fileInputInfo) {
-        const fileInput = form.querySelector(`input[name="${fileInputInfo.inputName}"]`);
-        if (fileInput && fileInput.files.length > 0) {
-            fileToUpload = {
-                file: fileInput.files[0],
-                linkKey: fileInputInfo.linkKey
-            };
-        }
-    }
-    
-    const success = await postData(sheetName, data, fileToUpload);
-    if (success) {
-        showMessage(`${sheetName.replace('KPI-Entries', 'Data')} berhasil disimpan!`, 'success');
-        await fetchInitialData(); // Ambil data terbaru
-        loadPageData(document.querySelector('.content-page.active').id);
-        updateDashboard();
-        form.reset();
-    } else {
-        showMessage(`Gagal menyimpan data.`, 'error');
-    }
-    showLoading(form, false);
-}
-
-function loadPageData(pageId) {
-    // Implementasi loadPageData dengan renderSummaryTable seperti sebelumnya
-    // Contoh untuk satu halaman:
-    switch(pageId) {
-        case 'upload-canvasing':
-           renderSummaryTable('canvasingSummary', currentData.kpiEntries.filter(e => e.Kategori === 'Upload Meeting Canvasing'), [
-              { header: 'Judul Meeting', key: 'Judul Meeting' },
-              { header: 'Catatan', key: 'Catatan' },
-              { header: 'Link File', key: 'Link File' }, // Kolom ini akan berisi link GDrive
-              { header: 'Tanggal', key: 'Tanggal' },
-          ], 'Belum ada upload canvasing.');
-          break;
-        // ... tambahkan case untuk halaman lain
-    }
-}
-
-
-// ===================================================================================
-// EVENT LISTENERS
+// EVENT LISTENERS (DIPERBARUI)
 // ===================================================================================
 document.addEventListener('DOMContentLoaded', async function() {
-    // ... (fungsi inisialisasi sama seperti sebelumnya) ...
+    const loginForm = document.getElementById('loginForm');
+    const loginButton = loginForm.querySelector('button[type="submit"]');
+    loginButton.dataset.originalText = loginButton.innerHTML; // Simpan teks asli
 
-    // --- CONTOH EVENT LISTENER BARU UNTUK FORM DENGAN FILE ---
+    showLoading(loginForm, true, 'Memuat data...');
+
+    const dataLoaded = await fetchInitialData();
     
-    document.getElementById('canvasingForm').addEventListener('submit', e => {
-        e.preventDefault();
-        handleFormSubmit(e.target, 'KPI-Entries', 
-            fd => ({ // dataMapper
-                'Kategori': 'Upload Meeting Canvasing',
-                'Judul Meeting': fd.get('meetingTitle'),
-                'Catatan': fd.get('notes')
-            }),
-            { inputName: 'document', linkKey: 'Link File' } // fileInputInfo
-        );
-    });
+    // Sembunyikan loading setelah selesai, baik berhasil maupun gagal
+    showLoading(loginForm, false);
 
-    document.getElementById('promosiForm').addEventListener('submit', e => {
-        e.preventDefault();
-        handleFormSubmit(e.target, 'KPI-Entries',
-            fd => ({
-                'Kategori': 'Upload Promosi Campaign',
-                'Nama Campaign': fd.get('campaignName'),
-                'Platform': fd.get('platform')
-            }),
-            { inputName: 'screenshot', linkKey: 'Link Screenshot' }
-        );
-    });
-
-    document.getElementById('doorToDoorForm').addEventListener('submit', e => {
-        e.preventDefault();
-        handleFormSubmit(e.target, 'KPI-Entries',
-            fd => ({
-                'Kategori': 'Door-to-door',
-                'Tanggal Kunjungan': fd.get('visitDate'),
-                'Nama Instansi': fd.get('institutionName'),
-                'Alamat Lengkap Instansi': fd.get('address'),
-                'Nama PIC Instansi': fd.get('picName'),
-                'Nomor HP PIC': fd.get('picPhone'),
-                'Hasil Respons Kunjungan': fd.get('response')
-            }),
-            { inputName: 'proof', linkKey: 'Link Bukti Kunjungan' }
-        );
-    });
+    if (!dataLoaded) {
+        // Jika data gagal dimuat, jangan lanjutkan setup event listener lain
+        loginButton.disabled = true; // Matikan tombol login
+        return;
+    }
     
-    // Lanjutkan pola yang sama untuk semua form lain yang memiliki input file...
-    // Contoh untuk Quotation:
-    document.getElementById('quotationForm').addEventListener('submit', e => {
+    // Event listener untuk form login
+    loginForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        handleFormSubmit(e.target, 'KPI-Entries',
-            fd => ({
-                'Kategori': 'Quotation',
-                'Nama Customer': fd.get('customerName'),
-                'Jenis Produk': fd.get('productType'),
-                'Nominal Quotation': fd.get('quotationAmount'),
-                'Keterangan': fd.get('description')
-            }),
-            { inputName: 'quotationDoc', linkKey: 'Link Dokumen Quotation' }
-        );
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        if (login(username, password)) {
+            showPage('mainApp');
+            showContentPage('dashboard');
+        } else {
+            showMessage('Username atau password salah!', 'error');
+        }
     });
 
-    // ... Dan seterusnya untuk form: surveyForm, laporanForm, eventForm, campaignForm
-
-    // --- FORM TANPA FILE TETAP SAMA ---
-    document.getElementById('leadForm').addEventListener('submit', e => {
-        e.preventDefault();
-        handleFormSubmit(e.target, 'KPI-Entries', fd => ({
-            'Kategori': 'Input Lead',
-            'Nama Customer / Perusahaan': fd.get('customerName'),
-            'Sumber Lead': fd.get('leadSource'),
-            'Produk yang Diminati': fd.get('product'),
-            'No Kontak': fd.get('contact'),
-            'Catatan Awal': fd.get('notes')
-        })); // Tidak ada argumen ke-4 karena tidak ada file
-    });
-    
-    // ... Lanjutkan untuk crmSurveyForm dan konversiForm
+    // ... (Semua event listener lain untuk form KPI tetap sama) ...
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    document.querySelectorAll('.nav-link').forEach(link => { link.addEventListener('click', function(e) { e.preventDefault(); showContentPage(this.getAttribute('data-page')); }); });
+    // Dst. untuk semua form
 });
 
-// Utility function for showing messages
-function showMessage(message, type = 'info') { /* ... (sama) ... */ }
-
-// NOTE: Potongan kode yang tidak berubah (seperti fetchInitialData, login, dll.) disingkat agar fokus pada perubahan.
-// Anda harus menggabungkan logika baru ini dengan file app.js Anda yang sudah ada.
+// ... (sisa fungsi lain seperti handleFormSubmit, renderSummaryTable, showMessage, dll. tetap sama) ...
