@@ -1,9 +1,13 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.1.0
+ * @version 1.2.0
  *
- * Perubahan Utama (v1.1.0):
+ * Perubahan Utama (v1.2.0):
+ * - FITUR BARU: Menambahkan auto-refresh setiap 30 detik untuk memuat data terbaru secara otomatis.
+ * - PENYESUAIAN UI: Pesan "Memuat data..." hanya muncul saat halaman pertama kali dibuka, tidak saat auto-refresh.
+ *
+ * Perubahan Sebelumnya:
  * - PERBAIKAN BUG: Mencegah render loop pada grafik dengan menghancurkan instance grafik lama sebelum membuat yang baru.
  */
 
@@ -23,34 +27,56 @@ if (currentUser.role !== 'management') {
 // KONFIGURASI
 // =================================================================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
+const REFRESH_INTERVAL = 30000; // Interval refresh dalam milidetik (30 detik)
 let allData = {}; // Tempat menyimpan semua data dari server
 let salesList = []; // Daftar semua sales
-let salesChartInstance = null; // PERBAIKAN: Variabel untuk menyimpan instance grafik
+let salesChartInstance = null; // Variabel untuk menyimpan instance grafik
 
 // =================================================================================
 // FUNGSI UTAMA
 // =================================================================================
 
 /**
- * Memuat semua data awal dari server.
+ * Memuat semua data dari server.
+ * @param {boolean} isInitialLoad - Menandakan apakah ini pemuatan pertama kali.
  */
-async function loadInitialData() {
-    showMessage("Memuat data tim dari server...", "info");
+async function loadInitialData(isInitialLoad = false) {
+    if (isInitialLoad) {
+        showMessage("Memuat data tim dari server...", "info");
+    }
+    
     try {
-        const response = await fetch(`${SCRIPT_URL}?action=getAllData`, { mode: 'cors' });
+        // Tambahkan parameter acak untuk mencegah caching di sisi browser/ISP
+        const fetchUrl = `${SCRIPT_URL}?action=getAllData&t=${new Date().getTime()}`;
+        const response = await fetch(fetchUrl, { mode: 'cors' });
         const result = await response.json();
+
         if (result.status === 'success') {
             allData = result.data;
-            // Dapatkan daftar sales unik dari data leads
-            salesList = [...new Set(allData.leads.map(item => item.sales))];
-            showMessage("Data berhasil dimuat.", "success");
-            updateAllUI();
+            const newSalesList = [...new Set(allData.leads.map(item => item.sales))];
+            
+            // Hanya update UI jika ada perubahan data atau ini pemuatan pertama
+            if (JSON.stringify(newSalesList) !== JSON.stringify(salesList) || isInitialLoad) {
+                salesList = newSalesList;
+                updateAllUI();
+            }
+
+            if (isInitialLoad) {
+                showMessage("Data berhasil dimuat.", "success");
+            }
         } else {
-            throw new Error(result.message);
+            // Hanya tampilkan error jika ini pemuatan pertama, agar tidak mengganggu
+            if (isInitialLoad) {
+                throw new Error(result.message);
+            } else {
+                console.error("Auto-refresh failed:", result.message);
+            }
         }
     } catch (error) {
         console.error('Error loading initial data:', error);
-        showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        if (isInitialLoad) {
+            showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        }
     }
 }
 
@@ -140,7 +166,7 @@ function updateLeaderboard() {
 function renderSalesChart() {
     const ctx = document.getElementById('salesActivityChart').getContext('2d');
     
-    // PERBAIKAN: Hancurkan grafik lama jika sudah ada
+    // Hancurkan grafik lama jika sudah ada
     if (salesChartInstance) {
         salesChartInstance.destroy();
     }
@@ -163,7 +189,7 @@ function renderSalesChart() {
         }]
     };
 
-    // PERBAIKAN: Simpan instance grafik yang baru
+    // Simpan instance grafik yang baru
     salesChartInstance = new Chart(ctx, {
         type: 'bar',
         data: chartData,
@@ -230,7 +256,10 @@ function initializeApp() {
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     updateDateTime();
     setInterval(updateDateTime, 60000);
-    loadInitialData();
+
+    // --- PERUBAHAN: Memuat data pertama kali, lalu set interval untuk refresh ---
+    loadInitialData(true); // Pemuatan pertama, tampilkan pesan
+    setInterval(() => loadInitialData(false), REFRESH_INTERVAL); // Refresh otomatis, tanpa pesan
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);
