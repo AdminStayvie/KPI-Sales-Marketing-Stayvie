@@ -105,9 +105,18 @@ async function loadInitialData() {
     }
 }
 
-// --- FUNGSI-FUNGSI FORM HANDLER (Tidak berubah) ---
+// --- FUNGSI-FUNGSI FORM HANDLER ---
 function handleLeadForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, customerName: formData.get('customerName'), leadSource: formData.get('leadSource'), product: formData.get('product'), contact: formData.get('contact'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Leads', data, null, e); }
-// ... (dan semua fungsi handleForm lainnya)
+function handleCanvasingForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, meetingTitle: formData.get('meetingTitle'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Canvasing', data, e.target.querySelector('input[type="file"]'), e); }
+function handlePromosiForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, campaignName: formData.get('campaignName'), platform: formData.get('platform'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Promosi', data, e.target.querySelector('input[type="file"]'), e); }
+function handleDoorToDoorForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, visitDate: formData.get('visitDate'), institutionName: formData.get('institutionName'), address: formData.get('address'), picName: formData.get('picName'), picPhone: formData.get('picPhone'), response: formData.get('response'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'DoorToDoor', data, e.target.querySelector('input[type="file"]'), e); }
+function handleQuotationForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, customerName: formData.get('customerName'), productType: formData.get('productType'), quotationAmount: formData.get('quotationAmount'), description: formData.get('description'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Quotations', data, e.target.querySelector('input[type="file"]'), e); }
+function handleSurveyForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, customerName: formData.get('customerName'), gender: formData.get('gender'), phone: formData.get('phone'), surveyDate: formData.get('surveyDate'), origin: formData.get('origin'), feedback: formData.get('feedback'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Surveys', data, e.target.querySelector('input[type="file"]'), e); }
+function handleLaporanForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, reportPeriod: formData.get('reportPeriod'), managementFeedback: formData.get('managementFeedback'), additionalNotes: formData.get('additionalNotes'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Reports', data, e.target.querySelector('input[type="file"]'), e); }
+function handleCrmSurveyForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, competitorName: formData.get('competitorName'), website: formData.get('website'), product: formData.get('product'), priceDetails: formData.get('priceDetails'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'CRMSurveys', data, null, e); }
+function handleKonversiForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, eventName: formData.get('eventName'), clientName: formData.get('clientName'), eventDate: formData.get('eventDate'), venueType: formData.get('venueType'), barterValue: formData.get('barterValue'), barterDescription: formData.get('barterDescription'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Conversions', data, null, e); }
+function handleEventForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, eventName: formData.get('eventName'), eventType: formData.get('eventType'), eventDate: formData.get('eventDate'), eventLocation: formData.get('eventLocation'), organizer: formData.get('organizer'), benefits: formData.get('benefits'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Events', data, e.target.querySelector('input[type="file"]'), e); }
+function handleCampaignForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, campaignTitle: formData.get('campaignTitle'), targetMarket: formData.get('targetMarket'), campaignStartDate: formData.get('campaignStartDate'), campaignEndDate: formData.get('campaignEndDate'), conceptDescription: formData.get('conceptDescription'), potentialConversion: formData.get('potentialConversion'), budget: formData.get('budget'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Campaigns', data, e.target.querySelector('input[type="file"]'), e); }
 
 // --- FUNGSI UTILITY & MANAJEMEN ---
 function toBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = error => reject(error); }); }
@@ -122,58 +131,27 @@ function logout() { localStorage.removeItem('currentUser'); window.location.href
 function showContentPage(pageId) { document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active')); const pageElement = document.getElementById(pageId); if (pageElement) pageElement.classList.add('active'); document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active')); const navLink = document.querySelector(`[data-page="${pageId}"]`); if (navLink) navLink.classList.add('active'); }
 function updateDateTime() { const now = new Date(); const dateTimeElement = document.getElementById('currentDateTime'); if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
 
-// --- PERBAIKAN LOGIKA KALKULASI ---
-
-// Fungsi helper untuk mendapatkan data yang sudah difilter berdasarkan pengguna
-function getFilteredData(dataType) {
-    const data = currentData[dataType] || [];
-    return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name);
-}
-
-// Fungsi helper terpusat untuk menghitung pencapaian target spesifik
-function calculateAchievementForTarget(targetId, period) {
-    const today = new Date();
-    const weekStart = getWeekStart(today);
-    const monthStart = getMonthStart(today);
-
+// --- LOGIKA KALKULASI & UPDATE UI ---
+function getFilteredData(dataType) { const data = currentData[dataType] || []; return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); }
+function calculateAchievementForTarget(targetId) {
+    const today = getCurrentDateString();
+    const weekStart = getWeekStart();
     switch(targetId) {
-        case 1: // Menginput Data Lead
-            return getFilteredData('leads').filter(d => d.date && d.date.startsWith(getCurrentDateString())).length;
-        case 3: // Promosi Campaign Package
-            return getFilteredData('promosi').filter(d => d.date && d.date.startsWith(getCurrentDateString())).length;
-        case 4: // Canvasing dan Pitching
-            return getFilteredData('canvasing').filter(d => d.date && new Date(d.date) >= weekStart).length;
-        // Tambahkan case lain di sini untuk target lainnya
-        default:
-            return 0; // Target belum diimplementasikan
+        case 1: return getFilteredData('leads').filter(d => d.date && d.date.startsWith(today)).length;
+        case 3: return getFilteredData('promosi').filter(d => d.date && d.date.startsWith(today)).length;
+        case 4: return getFilteredData('canvasing').filter(d => d.date && new Date(d.date) >= weekStart).length;
+        default: return 0;
     }
 }
+function calculateDailyAchievements() { return appData.daily_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
+function calculateWeeklyAchievements() { return appData.weekly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
+function calculateMonthlyAchievements() { return appData.monthly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
 
-// Fungsi kalkulasi utama sekarang menggunakan helper
-function calculateDailyAchievements() {
-    return appData.daily_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0);
-}
-
-function calculateWeeklyAchievements() {
-    return appData.weekly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0);
-}
-
-function calculateMonthlyAchievements() {
-    return appData.monthly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0);
-}
-
-// Fungsi updateDetailTarget sekarang menggunakan kalkulasi nyata
 function updateTargetBreakdown() {
     const container = document.getElementById('targetBreakdown');
     if (!container) return;
-    container.innerHTML = ''; // Hapus konten lama
-
-    const allTargets = [
-        ...appData.daily_targets.map(t => ({ ...t, type: 'Harian' })),
-        ...appData.weekly_targets.map(t => ({ ...t, type: 'Mingguan' })),
-        ...appData.monthly_targets.map(t => ({ ...t, type: 'Bulanan' }))
-    ];
-    
+    container.innerHTML = '';
+    const allTargets = [ ...appData.daily_targets.map(t => ({ ...t, type: 'Harian' })), ...appData.weekly_targets.map(t => ({ ...t, type: 'Mingguan' })), ...appData.monthly_targets.map(t => ({ ...t, type: 'Bulanan' })) ];
     let currentType = '';
     allTargets.forEach(target => {
         if (currentData.settings[target.id]) {
@@ -183,38 +161,26 @@ function updateTargetBreakdown() {
                 h4.textContent = `Target ${currentType}`;
                 container.appendChild(h4);
             }
-            
-            // Kalkulasi pencapaian nyata
             const achieved = calculateAchievementForTarget(target.id);
             const status = achieved >= target.target ? 'completed' : 'pending';
-            
             const item = document.createElement('div');
             item.className = 'target-item';
-            item.innerHTML = `
-                <div class="target-name">${target.name}</div>
-                <div class="target-progress">
-                    <span>${achieved}/${target.target}</span>
-                    <span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span>
-                </div>`;
+            item.innerHTML = `<div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div>`;
             container.appendChild(item);
         }
     });
 }
 
-// --- FUNGSI UPDATE UI LAINNYA ---
 function updateDashboard() {
     if (!currentUser) return;
     const userDisplay = document.getElementById('userDisplayName');
     if (userDisplay) userDisplay.textContent = currentUser.name;
-    
     const dailyAchieved = calculateDailyAchievements();
     const weeklyAchieved = calculateWeeklyAchievements();
     const monthlyAchieved = calculateMonthlyAchievements();
-    
     const dailyTotal = appData.daily_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0);
     const weeklyTotal = appData.weekly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0);
     const monthlyTotal = appData.monthly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0);
-    
     updateProgressBar('daily', dailyAchieved, dailyTotal);
     updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
     updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
@@ -234,14 +200,36 @@ function updateAllSummaries() {
 
 function createSummaryTable(containerId, data, headers, rowGenerator) { const container = document.getElementById(containerId); if (!container) return; const userSpecificData = currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); if (userSpecificData.length === 0) { container.innerHTML = `<div class="empty-state">Belum ada data yang diinput</div>`; return; } let tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>`; userSpecificData.slice(-10).reverse().forEach(item => { tableHTML += `<tr>${rowGenerator(item)}</tr>`; }); tableHTML += `</tbody></table>`; container.innerHTML = tableHTML; }
 function updateLeadsSummary() { createSummaryTable('leadSummary', currentData.leads, ['Waktu Input', 'Customer', 'Sumber', 'Produk', 'Kontak'], item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td>${item.contact || ''}</td>`); }
-// ... (dan semua fungsi update summary lainnya)
+function updateCanvasingSummary() { createSummaryTable('canvasingSummary', currentData.canvasing, ['Waktu Input', 'Judul Meeting', 'Tanggal', 'File'], item => `<td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.date ? formatDate(item.date) : ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>`); }
+function updatePromosiSummary() { createSummaryTable('promosiSummary', currentData.promosi, ['Waktu Input', 'Campaign', 'Platform', 'Tanggal'], item => `<td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td><td>${item.date ? formatDate(item.date) : ''}</td>`); }
+function updateDoorToDoorSummary() { createSummaryTable('doorToDoorSummary', currentData.doorToDoor, ['Waktu Input', 'Tanggal Kunjungan', 'Instansi', 'PIC'], item => `<td>${item.datestamp || ''}</td><td>${item.visitDate ? formatDate(item.visitDate) : ''}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td>`); }
+function updateQuotationsSummary() { createSummaryTable('quotationSummary', currentData.quotations, ['Waktu Input', 'Customer', 'Produk', 'Nominal'], item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${item.quotationAmount ? formatCurrency(item.quotationAmount) : ''}</td>`); }
+function updateSurveysSummary() { createSummaryTable('surveySummary', currentData.surveys, ['Waktu Input', 'Tanggal Survey', 'Customer', 'Asal'], item => `<td>${item.datestamp || ''}</td><td>${item.surveyDate ? formatDate(item.surveyDate) : ''}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td>`); }
+function updateReportsSummary() { createSummaryTable('laporanSummary', currentData.reports, ['Waktu Input', 'Periode', 'File'], item => `<td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>`); }
+function updateCRMSurveysSummary() { createSummaryTable('crmSurveySummary', currentData.crmSurveys, ['Waktu Input', 'Kompetitor', 'Website'], item => `<td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td>`); }
+function updateConversionsSummary() { createSummaryTable('konversiSummary', currentData.conversions, ['Waktu Input', 'Event', 'Client', 'Tanggal'], item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${item.eventDate ? formatDate(item.eventDate) : ''}</td>`); }
+function updateEventsSummary() { createSummaryTable('eventSummary', currentData.events, ['Waktu Input', 'Nama Event', 'Jenis', 'Tanggal'], item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${item.eventDate ? formatDate(item.eventDate) : ''}</td>`); }
+function updateCampaignsSummary() { createSummaryTable('campaignSummary', currentData.campaigns, ['Waktu Input', 'Judul', 'Periode', 'Budget'], item => `<td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${item.campaignStartDate ? formatDate(item.campaignStartDate) : ''} - ${item.campaignEndDate ? formatDate(item.campaignEndDate) : ''}</td><td>${item.budget ? formatCurrency(item.budget) : ''}</td>`); }
 function updateAdministrasiSummary() { if (currentUser && currentUser.role === 'management') updateAdminSettings(); }
-function updateAdminSettings() { /* ... */ }
-window.toggleSetting = function(targetId) { /* ... */ }
+function updateAdminSettings() { const container = document.getElementById('adminSettings'); if (!container) return; let html = '<div class="admin-settings-grid">'; const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets]; allTargets.forEach(target => { const isActive = currentData.settings[target.id]; html += `<div class="setting-item"><div class="setting-info"><div class="setting-name">${target.name}</div><div class="setting-description">Denda: ${formatCurrency(target.penalty)}</div></div><label class="toggle-switch"><input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleSetting(${target.id})"><span class="toggle-slider"></span></label></div>`; }); html += '</div>'; container.innerHTML = html; }
+window.toggleSetting = function(targetId) { currentData.settings[targetId] = !currentData.settings[targetId]; updateDashboard(); showMessage('Pengaturan disimpan (hanya di sesi ini).', 'info'); }
 
 // --- EVENT LISTENERS & INISIALISASI ---
 function showMessage(message, type = 'info') { const notification = document.createElement('div'); notification.className = `message ${type}`; notification.textContent = message; const mainContent = document.querySelector('.main-content'); if(mainContent) { mainContent.insertBefore(notification, mainContent.firstChild); setTimeout(() => { notification.remove(); }, 4000); } }
-function setupFormListeners() { const forms = { 'leadForm': handleLeadForm, /* ... */ }; for (const formId in forms) { const formElement = document.getElementById(formId); if (formElement) formElement.addEventListener('submit', forms[formId]); } }
+function setupFormListeners() {
+    const forms = {
+        'leadForm': handleLeadForm, 'canvasingForm': handleCanvasingForm,
+        'promosiForm': handlePromosiForm, 'doorToDoorForm': handleDoorToDoorForm,
+        'quotationForm': handleQuotationForm, 'surveyForm': handleSurveyForm,
+        'laporanForm': handleLaporanForm, 'crmSurveyForm': handleCrmSurveyForm,
+        'konversiForm': handleKonversiForm, 'eventForm': handleEventForm,
+        'campaignForm': handleCampaignForm
+    };
+    for (const formId in forms) {
+        const formElement = document.getElementById(formId);
+        if (formElement) formElement.addEventListener('submit', forms[formId]);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     if(!currentUser) return;
