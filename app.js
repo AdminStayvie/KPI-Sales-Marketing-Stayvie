@@ -88,12 +88,15 @@ async function loadInitialData() {
         const response = await fetch(`${SCRIPT_URL}?action=getAllData`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            for (const serverKey in result.data) {
-                const localKey = serverKey.charAt(0).toLowerCase() + serverKey.slice(1);
-                if (currentData.hasOwnProperty(localKey)) {
-                    currentData[localKey] = result.data[serverKey];
+            // --- PERBAIKAN DI SINI ---
+            // Langsung salin data menggunakan kunci yang sama dari server
+            for (const key in result.data) {
+                if (currentData.hasOwnProperty(key)) {
+                    currentData[key] = result.data[key];
                 }
             }
+            // --- AKHIR PERBAIKAN ---
+
             showMessage("Data berhasil dimuat.", "success");
             updateDashboard();
             updateAllSummaries();
@@ -134,19 +137,15 @@ function updateDateTime() { const now = new Date(); const dateTimeElement = docu
 // --- LOGIKA KALKULASI & UPDATE UI ---
 function getFilteredData(dataType) { const data = currentData[dataType] || []; return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); }
 
-// --- PERBAIKAN DI SINI ---
 function calculateAchievementForTarget(targetId) {
     const today = getCurrentDateString();
     const weekStart = getWeekStart();
     const monthStart = getMonthStart();
 
     switch(targetId) {
-        // Daily
         case 1: return getFilteredData('leads').filter(d => d.date && d.date.startsWith(today)).length;
-        case 2: return 0; // 'Konversi Lead' - Belum ada form
+        case 2: return 0;
         case 3: return getFilteredData('promosi').filter(d => d.date && d.date.startsWith(today)).length;
-        
-        // Weekly
         case 4: return getFilteredData('canvasing').filter(d => d.date && new Date(d.date) >= weekStart).length;
         case 5: return getFilteredData('doorToDoor').filter(d => d.visitDate && new Date(d.visitDate) >= weekStart).length;
         case 6: return getFilteredData('quotations').filter(d => d.date && new Date(d.date) >= weekStart).length;
@@ -154,17 +153,13 @@ function calculateAchievementForTarget(targetId) {
         case 8: return getFilteredData('reports').filter(d => d.timestamp && new Date(d.timestamp) >= weekStart).length;
         case 9: return getFilteredData('crmSurveys').filter(d => d.timestamp && new Date(d.timestamp) >= weekStart).length;
         case 10: return getFilteredData('conversions').filter(d => d.eventDate && new Date(d.eventDate) >= weekStart).length;
-
-        // Monthly
-        case 11: return 0; // 'Konversi B2B' - Belum ada form
-        case 12: return 0; // 'Konversi Venue' - Belum ada form
+        case 11: return 0;
+        case 12: return 0;
         case 13: return getFilteredData('events').filter(d => d.eventDate && new Date(d.eventDate) >= monthStart).length;
         case 14: return getFilteredData('campaigns').filter(d => d.campaignStartDate && new Date(d.campaignStartDate) >= monthStart).length;
-
         default: return 0;
     }
 }
-// --- AKHIR PERBAIKAN ---
 
 function calculateDailyAchievements() { return appData.daily_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
 function calculateWeeklyAchievements() { return appData.weekly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
