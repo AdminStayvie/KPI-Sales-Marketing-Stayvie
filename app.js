@@ -1,9 +1,12 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.2.0
+ * @version 2.3.0
  *
- * Perubahan Utama (v2.2.0):
+ * Perubahan Utama (v2.3.0):
+ * - PERUBAHAN LOGIKA: Mengubah periode perhitungan bulanan. Sekarang dihitung dari tanggal 21 bulan sebelumnya hingga tanggal 20 bulan ini.
+ *
+ * Perubahan Sebelumnya:
  * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk beberapa target (seperti Launch Campaign) menjadi 'timestamp' agar perhitungan KPI didasarkan pada waktu input, bukan tanggal acara/kampanye.
  * - PERBAIKAN BUG: Memperbaiki typo di fungsi `updateAllSummaries` (dataMappin -> dataMapping).
  * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang.
@@ -46,7 +49,7 @@ const CONFIG = {
             { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'timestamp' },
             { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'timestamp' },
             { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'timestamp' },
-            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' } // <-- PERUBAHAN LOGIKA DI SINI
+            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' }
         ]
     },
     // Pemetaan nama sheet ke kunci data dan konfigurasi tabel ringkasan
@@ -361,7 +364,37 @@ function getCurrentDateString() { const today = new Date(); return today.toISOSt
 function getLocalTimestampString() { const now = new Date(); return now.toISOString(); }
 function getDatestamp() { const now = new Date(); return now.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-function getMonthStart(date = new Date()) { const d = new Date(date.getFullYear(), date.getMonth(), 1); d.setHours(0, 0, 0, 0); return d; }
+
+/**
+ * Menghitung tanggal mulai periode KPI bulanan.
+ * Periode dihitung dari tanggal 21 bulan lalu hingga tanggal 20 bulan ini.
+ */
+function getMonthStart(date = new Date()) {
+    const today = new Date(date);
+    const currentDay = today.getDate();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    // Tanggal batas (cutoff) adalah tanggal 20.
+    const cutoffDay = 20;
+
+    let startDate;
+
+    if (currentDay > cutoffDay) {
+        // Jika hari ini setelah tanggal 20, periode baru dimulai dari tanggal 21 bulan ini.
+        startDate = new Date(currentYear, currentMonth, 21);
+    } else {
+        // Jika hari ini tanggal 20 atau sebelumnya, kita masih di periode bulan lalu.
+        // Periode dimulai dari tanggal 21 bulan sebelumnya.
+        const previousMonth = new Date(currentYear, currentMonth, 1);
+        previousMonth.setMonth(previousMonth.getMonth() - 1);
+        startDate = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 21);
+    }
+    
+    startDate.setHours(0, 0, 0, 0);
+    return startDate;
+}
+
 function isWithinCutoffTime() { return new Date().getHours() < 16; }
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
 
