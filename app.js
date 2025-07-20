@@ -90,9 +90,12 @@ async function loadInitialData() {
         if (result.status === 'success') {
             // --- PERBAIKAN DI SINI ---
             // Langsung salin data menggunakan kunci yang sama dari server
-            for (const key in result.data) {
-                if (currentData.hasOwnProperty(key)) {
-                    currentData[key] = result.data[key];
+            for (const serverKey in result.data) {
+                // Ubah kunci dari server (PascalCase) menjadi kunci lokal (camelCase)
+                const localKey = serverKey.charAt(0).toLowerCase() + serverKey.slice(1);
+                // Jika kunci lokal ada di currentData, salin datanya
+                if (currentData.hasOwnProperty(localKey)) {
+                    currentData[localKey] = result.data[serverKey];
                 }
             }
             // --- AKHIR PERBAIKAN ---
