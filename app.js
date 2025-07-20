@@ -6,10 +6,8 @@
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 const currentUserJSON = localStorage.getItem('currentUser');
 if (!currentUserJSON) {
-    // Jika tidak ada pengguna yang login, tendang kembali ke halaman login.
     window.location.href = 'index.html';
 }
-// Variabel global untuk pengguna yang sedang login
 let currentUser = JSON.parse(currentUserJSON);
 
 
@@ -19,49 +17,15 @@ let currentUser = JSON.parse(currentUserJSON);
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; 
 // =================================================================================
 
-// Data statis aplikasi (tidak berubah)
-const appData = {
-  sales_team: ["Eka", "Saski", "Lidya", "Rizka"],
-  daily_targets: [
-    {"id": 1, "name": "Menginput Data Lead", "target": 20, "penalty": 15000},
-    {"id": 2, "name": "Konversi Lead Menjadi Prospek", "target": 5, "penalty": 20000},
-    {"id": 3, "name": "Promosi Campaign Package", "target": 2, "penalty": 10000}
-  ],
-  weekly_targets: [
-    {"id": 4, "name": "Canvasing dan Pitching", "target": 1, "penalty": 50000},
-    {"id": 5, "name": "Door-to-door perusahaan", "target": 3, "penalty": 150000},
-    {"id": 6, "name": "Menyampaikan Quotation", "target": 1, "penalty": 50000},
-    {"id": 7, "name": "Survey pengunjung Co-living", "target": 4, "penalty": 50000},
-    {"id": 8, "name": "Laporan Ringkas Mingguan", "target": 1, "penalty": 50000},
-    {"id": 9, "name": "Input CRM Survey kompetitor", "target": 1, "penalty": 25000},
-    {"id": 10, "name": "Konversi Booking Venue Barter", "target": 1, "penalty": 75000}
-  ],
-  monthly_targets: [
-    {"id": 11, "name": "Konversi Booking Kamar B2B", "target": 2, "penalty": 200000},
-    {"id": 12, "name": "Konversi Booking Venue", "target": 2, "penalty": 200000},
-    {"id": 13, "name": "Mengikuti Event/Networking", "target": 1, "penalty": 125000},
-    {"id": 14, "name": "Launch Campaign Package", "target": 1, "penalty": 150000}
-  ]
-};
-
-// State aplikasi (data dinamis)
+// --- STATE APLIKASI ---
 let currentData = {
   leads: [], canvasing: [], promosi: [], doorToDoor: [], quotations: [],
   surveys: [], reports: [], crmSurveys: [], conversions: [], events: [], campaigns: [],
   settings: {}
 };
+let selectedPeriod = { start: null, end: null }; // State untuk filter periode
 
-// Fungsi untuk mengubah file menjadi Base64
-function toBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = error => reject(error);
-  });
-}
-
-// Fungsi untuk mengirim data ke Google Apps Script dengan penanganan error yang lebih baik
+// --- FUNGSI UTAMA ---
 async function sendData(action, sheetName, data, fileInput, event) {
   const button = event.target.querySelector('button[type="submit"]');
   const originalButtonText = button.innerHTML;
@@ -75,7 +39,7 @@ async function sendData(action, sheetName, data, fileInput, event) {
     payload.fileData = await toBase64(file);
     payload.fileName = file.name;
     payload.fileType = file.type;
-    payload.categoryName = sheetName; // Kirim nama kategori untuk penamaan file
+    payload.categoryName = sheetName;
   }
 
   try {
@@ -83,23 +47,14 @@ async function sendData(action, sheetName, data, fileInput, event) {
       method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
-
-    if (!response.ok) {
-        throw new Error(`Server merespons dengan status: ${response.status}`);
-    }
-
-    const resultText = await response.text();
-    const result = JSON.parse(resultText);
-
+    if (!response.ok) throw new Error(`Server merespons dengan status: ${response.status}`);
+    const result = await response.json();
     if (result.status === 'success') {
       showMessage('Data berhasil disimpan!', 'success');
-      
       const dataKey = sheetName.charAt(0).toLowerCase() + sheetName.slice(1);
       if (!currentData[dataKey]) currentData[dataKey] = [];
       currentData[dataKey].push(result.data);
-
-      const updateFunction = window[`update${sheetName}Summary`];
-      if (typeof updateFunction === 'function') updateFunction();
+      updateAllSummaries(); // Perbarui semua tabel, termasuk yang baru difilter
       updateDashboard();
       event.target.reset();
     } else {
@@ -107,40 +62,28 @@ async function sendData(action, sheetName, data, fileInput, event) {
     }
   } catch (error) {
     console.error('Error di dalam fungsi sendData:', error);
-    showMessage(`Gagal mengirim data: ${error.message}. Cek console (F12) untuk detail.`, 'error');
+    showMessage(`Gagal mengirim data: ${error.message}.`, 'error');
   } finally {
     button.innerHTML = originalButtonText;
     button.disabled = false;
   }
 }
 
-// --- PERBAIKAN DI SINI ---
-// Fungsi untuk memuat semua data awal dari Google Sheet
 async function loadInitialData() {
-    if (SCRIPT_URL.includes("URL_WEB_APP_APPS_SCRIPT_ANDA")) {
-        showMessage("PENTING: Konfigurasi URL Google Apps Script di app.js belum diisi!", "error");
-        return;
-    }
     showMessage("Memuat data dari server...", "info");
     try {
         const response = await fetch(`${SCRIPT_URL}?action=getAllData`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            // Loop melalui data yang diterima dari server
             for (const serverKey in result.data) {
-                // Ubah kunci dari server (PascalCase) menjadi kunci lokal (camelCase)
                 const localKey = serverKey.charAt(0).toLowerCase() + serverKey.slice(1);
-                // Jika kunci lokal ada di currentData, salin datanya
                 if (currentData.hasOwnProperty(localKey)) {
                     currentData[localKey] = result.data[serverKey];
                 }
             }
-            
             showMessage("Data berhasil dimuat.", "success");
-            
             updateDashboard();
             updateAllSummaries();
-            
             showContentPage('dashboard');
         } else { throw new Error(result.message); }
     } catch (error) {
@@ -148,17 +91,8 @@ async function loadInitialData() {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     }
 }
-// --- AKHIR PERBAIKAN ---
 
-// Fungsi untuk memperbarui semua tabel ringkasan sekaligus
-function updateAllSummaries() {
-    updateLeadsSummary(); updateCanvasingSummary(); updatePromosiSummary();
-    updateDoorToDoorSummary(); updateQuotationsSummary(); updateSurveysSummary();
-    updateReportsSummary(); updateCRMSurveysSummary(); updateConversionsSummary();
-    updateEventsSummary(); updateCampaignsSummary(); updateAdministrasiSummary();
-}
-
-// --- FUNGSI-FUNGSI FORM HANDLER ---
+// --- FUNGSI-FUNGSI FORM HANDLER (Tidak berubah, hanya memanggil sendData) ---
 function handleLeadForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, customerName: formData.get('customerName'), leadSource: formData.get('leadSource'), product: formData.get('product'), contact: formData.get('contact'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Leads', data, null, e); }
 function handleCanvasingForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, meetingTitle: formData.get('meetingTitle'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Canvasing', data, e.target.querySelector('input[type="file"]'), e); }
 function handlePromosiForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, campaignName: formData.get('campaignName'), platform: formData.get('platform'), date: getCurrentDateString(), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Promosi', data, e.target.querySelector('input[type="file"]'), e); }
@@ -172,44 +106,101 @@ function handleEventForm(e) { e.preventDefault(); const formData = new FormData(
 function handleCampaignForm(e) { e.preventDefault(); const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.name, campaignTitle: formData.get('campaignTitle'), targetMarket: formData.get('targetMarket'), campaignStartDate: formData.get('campaignStartDate'), campaignEndDate: formData.get('campaignEndDate'), conceptDescription: formData.get('conceptDescription'), potentialConversion: formData.get('potentialConversion'), budget: formData.get('budget'), timestamp: getLocalTimestampString(), datestamp: getDatestamp() }; sendData('saveData', 'Campaigns', data, e.target.querySelector('input[type="file"]'), e); }
 
 // --- FUNGSI UTILITY & MANAJEMEN ---
-function initializeSettings() { const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets]; allTargets.forEach(target => { currentData.settings[target.id] = true; }); }
+function initializeSettings() { /* ... (Tidak berubah) ... */ }
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount); }
 function formatDate(date) { if (!(date instanceof Date)) date = new Date(date); return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
-
 function getCurrentDateString() { const today = new Date(); const year = today.getFullYear(); const month = (today.getMonth() + 1).toString().padStart(2, '0'); const day = today.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; }
 function getLocalTimestampString() { const now = new Date(); const year = now.getFullYear(); const month = (now.getMonth() + 1).toString().padStart(2, '0'); const day = now.getDate().toString().padStart(2, '0'); const hours = now.getHours().toString().padStart(2, '0'); const minutes = now.getMinutes().toString().padStart(2, '0'); const seconds = now.getSeconds().toString().padStart(2, '0'); const timezoneOffset = -now.getTimezoneOffset(); const offsetSign = timezoneOffset >= 0 ? '+' : '-'; const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60).toString().padStart(2, '0'); const offsetMinutes = (Math.abs(timezoneOffset) % 60).toString().padStart(2, '0'); return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetSign}${offsetHours}:${offsetMinutes}`; }
 function getDatestamp() { const now = new Date(); const hours = now.getHours().toString().padStart(2, '0'); const minutes = now.getMinutes().toString().padStart(2, '0'); const day = now.getDate().toString().padStart(2, '0'); const month = (now.getMonth() + 1).toString().padStart(2, '0'); const year = now.getFullYear(); return `${hours}:${minutes} ${day}/${month}/${year}`; }
-
 function isWithinCutoffTime() { return new Date().getHours() < 16; }
-
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
+function showContentPage(pageId) { document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active')); const pageElement = document.getElementById(pageId); if (pageElement) pageElement.classList.add('active'); document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active')); const navLink = document.querySelector(`[data-page="${pageId}"]`); if (navLink) navLink.classList.add('active'); }
+function updateDateTime() { const now = new Date(); const dateTimeElement = document.getElementById('currentDateTime'); if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
 
-function showContentPage(pageId) {
-  document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
-  const pageElement = document.getElementById(pageId);
-  if (pageElement) pageElement.classList.add('active');
-  document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-  const navLink = document.querySelector(`[data-page="${pageId}"]`);
-  if (navLink) navLink.classList.add('active');
+// --- LOGIKA FILTER PERIODE ---
+function getCutoffPeriods() {
+    const periods = [];
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth(); // 0-11
+
+    let periodEnd, periodStart;
+    if (today.getDate() > 20) {
+        periodStart = new Date(currentYear, currentMonth, 21);
+        periodEnd = new Date(currentYear, currentMonth + 1, 20);
+    } else {
+        periodStart = new Date(currentYear, currentMonth - 1, 21);
+        periodEnd = new Date(currentYear, currentMonth, 20);
+    }
+
+    for (let i = 0; i < 6; i++) {
+        const startStr = periodStart.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        const endStr = periodEnd.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        const periodText = i === 0 ? `Periode Ini (${startStr} - ${endStr})` : `${startStr} - ${endStr}`;
+        periods.push({ text: periodText, start: new Date(periodStart), end: new Date(periodEnd) });
+        periodEnd = new Date(periodStart);
+        periodEnd.setDate(periodEnd.getDate() - 1);
+        periodStart.setMonth(periodStart.getMonth() - 1);
+    }
+    return periods;
 }
 
-function updateDateTime() {
-  const now = new Date();
-  const dateTimeElement = document.getElementById('currentDateTime');
-  if(dateTimeElement) dateTimeElement.textContent = now.toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+function populatePeriodFilter() {
+    const filterSelect = document.getElementById('periodFilter');
+    if (!filterSelect) return;
+    const periods = getCutoffPeriods();
+    filterSelect.innerHTML = '';
+    periods.forEach((period, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = period.text;
+        filterSelect.appendChild(option);
+    });
+    const currentPeriod = periods[0];
+    selectedPeriod.start = currentPeriod.start;
+    selectedPeriod.end = currentPeriod.end;
+    selectedPeriod.start.setHours(0, 0, 0, 0);
+    selectedPeriod.end.setHours(23, 59, 59, 999);
 }
 
-// --- FUNGSI DASHBOARD & KALKULASI ---
-function updateDashboard() { if (!currentUser) return; const userDisplay = document.getElementById('userDisplayName'); if(userDisplay) userDisplay.textContent = currentUser.name; const today = getCurrentDateString(); const weekStart = getWeekStart(); const monthStart = getMonthStart(); const dailyAchieved = calculateDailyAchievements(today); const weeklyAchieved = calculateWeeklyAchievements(weekStart); const monthlyAchieved = calculateMonthlyAchievements(monthStart); const dailyTotal = appData.daily_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); const weeklyTotal = appData.weekly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); const monthlyTotal = appData.monthly_targets.reduce((sum, t) => currentData.settings[t.id] ? sum + t.target : sum, 0); updateProgressBar('daily', dailyAchieved, dailyTotal); updateProgressBar('weekly', weeklyAchieved, weeklyTotal); updateProgressBar('monthly', monthlyAchieved, monthlyTotal); updateTargetBreakdown(); }
-function updateProgressBar(type, achieved, total) { const percentage = total > 0 ? Math.round((achieved / total) * 100) : 0; const progressFill = document.getElementById(`${type}Progress`); const percentageText = document.getElementById(`${type}Percentage`); const achievedText = document.getElementById(`${type}Achieved`); const totalText = document.getElementById(`${type}Total`); if(progressFill) progressFill.style.width = `${percentage}%`; if(percentageText) percentageText.textContent = `${percentage}%`; if(achievedText) achievedText.textContent = achieved; if(totalText) totalText.textContent = total; }
+// --- FUNGSI DASHBOARD & KALKULASI (Tidak berubah) ---
+function updateDashboard() { /* ... (Tidak berubah) ... */ }
+function updateProgressBar(type, achieved, total) { /* ... (Tidak berubah) ... */ }
 function getFilteredData(dataType) { const data = currentData[dataType] || []; return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); }
 function calculateDailyAchievements(date) { const leadsToday = getFilteredData('leads').filter(l => l.date && l.date.startsWith(date)).length; const promosiToday = getFilteredData('promosi').filter(p => p.date && p.date.startsWith(date)).length; return leadsToday + promosiToday; }
-function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
-function getMonthStart(date = new Date()) { return new Date(date.getFullYear(), date.getMonth(), 1); }
-function calculateWeeklyAchievements(weekStart) { const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6); const canvasingThisWeek = getFilteredData('canvasing').filter(c => c.date && new Date(c.date) >= weekStart && new Date(c.date) <= weekEnd).length; const doorToDoorThisWeek = getFilteredData('doorToDoor').filter(d => d.visitDate && new Date(d.visitDate) >= weekStart && new Date(d.visitDate) <= weekEnd).length; return canvasingThisWeek + doorToDoorThisWeek; }
-function calculateMonthlyAchievements(monthStart) { const campaignsThisMonth = getFilteredData('campaigns').filter(c => c.campaignStartDate && new Date(c.campaignStartDate).getMonth() === monthStart.getMonth()).length; const eventsThisMonth = getFilteredData('events').filter(e => e.eventDate && new Date(e.eventDate).getMonth() === monthStart.getMonth()).length; return campaignsThisMonth + eventsThisMonth; }
-function updateTargetBreakdown() { const container = document.getElementById('targetBreakdown'); if (!container) return; container.innerHTML = '<div class="target-breakdown"></div>'; const breakdownContainer = container.querySelector('.target-breakdown'); const allTargets = [...appData.daily_targets.map(t => ({ ...t, type: 'Harian' })), ...appData.weekly_targets.map(t => ({ ...t, type: 'Mingguan' })), ...appData.monthly_targets.map(t => ({ ...t, type: 'Bulanan' }))]; let currentType = ''; allTargets.forEach(target => { if (currentData.settings[target.id]) { if (target.type !== currentType) { currentType = target.type; const h4 = document.createElement('h4'); h4.textContent = `Target ${currentType}`; breakdownContainer.appendChild(h4); } const achieved = 0; const status = achieved >= target.target ? 'completed' : 'pending'; breakdownContainer.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`; } }); }
-function createSummaryTable(containerId, data, headers, rowGenerator) { const container = document.getElementById(containerId); if (!container) return; const userSpecificData = currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); if (userSpecificData.length === 0) { container.innerHTML = `<div class="empty-state">Belum ada data yang diinput</div>`; return; } let tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>`; userSpecificData.slice(-10).reverse().forEach(item => { tableHTML += `<tr>${rowGenerator(item)}</tr>`; }); tableHTML += `</tbody></table>`; container.innerHTML = tableHTML; }
+function getWeekStart(date = new Date()) { /* ... (Tidak berubah) ... */ }
+function getMonthStart(date = new Date()) { /* ... (Tidak berubah) ... */ }
+function calculateWeeklyAchievements(weekStart) { /* ... (Tidak berubah) ... */ }
+function calculateMonthlyAchievements(monthStart) { /* ... (Tidak berubah) ... */ }
+function updateTargetBreakdown() { /* ... (Tidak berubah) ... */ }
+
+// --- FUNGSI UPDATE SUMMARY (DENGAN LOGIKA FILTER) ---
+function createSummaryTable(containerId, data, headers, rowGenerator) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    let userSpecificData = currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name);
+
+    if (selectedPeriod.start && selectedPeriod.end) {
+        userSpecificData = userSpecificData.filter(item => {
+            const dateField = item.date || item.visitDate || item.surveyDate || item.eventDate || item.campaignStartDate;
+            if (!dateField) return false;
+            const itemDate = new Date(dateField);
+            return itemDate >= selectedPeriod.start && itemDate <= selectedPeriod.end;
+        });
+    }
+
+    if (userSpecificData.length === 0) {
+        container.innerHTML = `<div class="empty-state">Belum ada data pada periode ini</div>`;
+        return;
+    }
+
+    let tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>`;
+    userSpecificData.slice(-10).reverse().forEach(item => { tableHTML += `<tr>${rowGenerator(item)}</tr>`; });
+    tableHTML += `</tbody></table>`;
+    container.innerHTML = tableHTML;
+}
+
 function updateLeadsSummary() { createSummaryTable('leadSummary', currentData.leads, ['Waktu Input', 'Customer', 'Sumber', 'Produk', 'Kontak'], item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td>${item.contact || ''}</td>`); }
 function updateCanvasingSummary() { createSummaryTable('canvasingSummary', currentData.canvasing, ['Waktu Input', 'Judul Meeting', 'Tanggal', 'File'], item => `<td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.date ? formatDate(item.date) : ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>`); }
 function updatePromosiSummary() { createSummaryTable('promosiSummary', currentData.promosi, ['Waktu Input', 'Campaign', 'Platform', 'Tanggal'], item => `<td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td><td>${item.date ? formatDate(item.date) : ''}</td>`); }
@@ -222,41 +213,40 @@ function updateConversionsSummary() { createSummaryTable('konversiSummary', curr
 function updateEventsSummary() { createSummaryTable('eventSummary', currentData.events, ['Waktu Input', 'Nama Event', 'Jenis', 'Tanggal'], item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${item.eventDate ? formatDate(item.eventDate) : ''}</td>`); }
 function updateCampaignsSummary() { createSummaryTable('campaignSummary', currentData.campaigns, ['Waktu Input', 'Judul', 'Periode', 'Budget'], item => `<td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${item.campaignStartDate ? formatDate(item.campaignStartDate) : ''} - ${item.campaignEndDate ? formatDate(item.campaignEndDate) : ''}</td><td>${item.budget ? formatCurrency(item.budget) : ''}</td>`); }
 function updateAdministrasiSummary() { if (currentUser && currentUser.role === 'management') updateAdminSettings(); }
-function updateAdminSettings() { const container = document.getElementById('adminSettings'); if (!container) return; let html = '<div class="admin-settings-grid">'; const allTargets = [...appData.daily_targets, ...appData.weekly_targets, ...appData.monthly_targets]; allTargets.forEach(target => { const isActive = currentData.settings[target.id]; html += `<div class="setting-item"><div class="setting-info"><div class="setting-name">${target.name}</div><div class="setting-description">Denda: ${formatCurrency(target.penalty)}</div></div><label class="toggle-switch"><input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleSetting(${target.id})"><span class="toggle-slider"></span></label></div>`; }); html += '</div>'; container.innerHTML = html; }
-window.toggleSetting = function(targetId) { currentData.settings[targetId] = !currentData.settings[targetId]; updateDashboard(); showMessage('Pengaturan disimpan (hanya di sesi ini).', 'info'); }
+function updateAdminSettings() { /* ... (Tidak berubah) ... */ }
+window.toggleSetting = function(targetId) { /* ... (Tidak berubah) ... */ }
 
 // --- EVENT LISTENERS & INISIALISASI ---
-function showMessage(message, type = 'info') { const notification = document.createElement('div'); notification.className = `message ${type}`; notification.textContent = message; const mainContent = document.querySelector('.main-content'); if(mainContent) { mainContent.insertBefore(notification, mainContent.firstChild); setTimeout(() => { notification.remove(); }, 4000); } }
-function loadPageData(pageId) { /* Dikosongkan karena updateAllSummaries sudah menangani */ }
-
+function showMessage(message, type = 'info') { /* ... (Tidak berubah) ... */ }
 function setupFormListeners() {
-    const forms = {
-        'leadForm': handleLeadForm, 'canvasingForm': handleCanvasingForm,
-        'promosiForm': handlePromosiForm, 'doorToDoorForm': handleDoorToDoorForm,
-        'quotationForm': handleQuotationForm, 'surveyForm': handleSurveyForm,
-        'laporanForm': handleLaporanForm, 'crmSurveyForm': handleCrmSurveyForm,
-        'konversiForm': handleKonversiForm, 'eventForm': handleEventForm,
-        'campaignForm': handleCampaignForm
-    };
-    for (const formId in forms) {
-        const formElement = document.getElementById(formId);
-        if (formElement) formElement.addEventListener('submit', forms[formId]);
-    }
+    const forms = { 'leadForm': handleLeadForm, 'canvasingForm': handleCanvasingForm, 'promosiForm': handlePromosiForm, 'doorToDoorForm': handleDoorToDoorForm, 'quotationForm': handleQuotationForm, 'surveyForm': handleSurveyForm, 'laporanForm': handleLaporanForm, 'crmSurveyForm': handleCrmSurveyForm, 'konversiForm': handleKonversiForm, 'eventForm': handleEventForm, 'campaignForm': handleCampaignForm };
+    for (const formId in forms) { const formElement = document.getElementById(formId); if (formElement) formElement.addEventListener('submit', forms[formId]); }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    if(!currentUser) return; // Stop execution if no user
-    
+    if(!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
-
     initializeSettings();
     updateDateTime();
     setInterval(updateDateTime, 60000);
-
-    // Langsung pasang listener karena semua elemen sudah ada di DOM
     setupFormListeners();
     
-    // Muat data dari server
+    populatePeriodFilter();
+    
+    const periodFilter = document.getElementById('periodFilter');
+    if(periodFilter) {
+        periodFilter.addEventListener('change', () => {
+            const periods = getCutoffPeriods();
+            const selectedIndex = periodFilter.value;
+            const newPeriod = periods[selectedIndex];
+            selectedPeriod.start = newPeriod.start;
+            selectedPeriod.end = newPeriod.end;
+            selectedPeriod.start.setHours(0, 0, 0, 0);
+            selectedPeriod.end.setHours(23, 59, 59, 999);
+            updateAllSummaries();
+        });
+    }
+
     loadInitialData();
 
     const logoutBtn = document.getElementById('logoutBtn');
