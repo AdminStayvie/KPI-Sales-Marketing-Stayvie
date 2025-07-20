@@ -191,6 +191,7 @@ function updateProgressBar(type, achieved, total) { const percentage = total > 0
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
 function getMonthStart(date = new Date()) { return new Date(date.getFullYear(), date.getMonth(), 1); }
 
+// --- PERBAIKAN DI SINI: SEMUA FUNGSI SUMMARY DIKEMBALIKAN ---
 function updateAllSummaries() {
     updateLeadsSummary(); updateCanvasingSummary(); updatePromosiSummary();
     updateDoorToDoorSummary(); updateQuotationsSummary(); updateSurveysSummary();
