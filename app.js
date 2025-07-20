@@ -5,7 +5,9 @@
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 const currentUserJSON = localStorage.getItem('currentUser');
-if (!currentUserJSON) { window.location.href = 'index.html'; }
+if (!currentUserJSON) {
+    window.location.href = 'index.html';
+}
 let currentUser = JSON.parse(currentUserJSON);
 
 // =================================================================================
