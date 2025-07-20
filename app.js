@@ -92,8 +92,14 @@ async function sendData(action, sheetName, data, fileInput, event) {
 
     if (result.status === 'success') {
       showMessage('Data berhasil disimpan!', 'success');
-      if (!currentData[sheetName.toLowerCase()]) currentData[sheetName.toLowerCase()] = [];
-      currentData[sheetName.toLowerCase()].push(result.data);
+      
+      // --- PERBAIKAN DI SINI ---
+      // Mengubah nama Sheet (PascalCase) menjadi kunci objek (camelCase)
+      const dataKey = sheetName.charAt(0).toLowerCase() + sheetName.slice(1);
+      if (!currentData[dataKey]) currentData[dataKey] = [];
+      currentData[dataKey].push(result.data);
+      // --- AKHIR PERBAIKAN ---
+
       const updateFunction = window[`update${sheetName}Summary`];
       if (typeof updateFunction === 'function') updateFunction();
       updateDashboard();
@@ -110,7 +116,6 @@ async function sendData(action, sheetName, data, fileInput, event) {
   }
 }
 
-// --- PERUBAHAN DI SINI ---
 // Fungsi untuk memuat semua data awal dari Google Sheet
 async function loadInitialData() {
     if (SCRIPT_URL.includes("URL_WEB_APP_APPS_SCRIPT_ANDA")) {
@@ -127,9 +132,8 @@ async function loadInitialData() {
             }
             showMessage("Data berhasil dimuat.", "success");
             
-            // Setelah semua data ada, perbarui semua UI
             updateDashboard();
-            updateAllSummaries(); // Panggil fungsi baru ini
+            updateAllSummaries();
             
             showContentPage('dashboard');
         } else { throw new Error(result.message); }
@@ -139,7 +143,6 @@ async function loadInitialData() {
     }
 }
 
-// --- FUNGSI BARU ---
 // Fungsi untuk memperbarui semua tabel ringkasan sekaligus
 function updateAllSummaries() {
     updateLeadsSummary();
@@ -155,7 +158,6 @@ function updateAllSummaries() {
     updateCampaignsSummary();
     updateAdministrasiSummary();
 }
-// --- AKHIR PERUBAHAN ---
 
 // --- FUNGSI-FUNGSI FORM HANDLER ---
 function handleLeadForm(e) { e.preventDefault(); if (!isWithinCutoffTime()) { showMessage('Batas waktu input harian (16:00) terlewati!', 'error'); return; } const formData = new FormData(e.target); const data = { id: Date.now(), sales: currentUser.username, customerName: formData.get('customerName'), leadSource: formData.get('leadSource'), product: formData.get('product'), contact: formData.get('contact'), notes: formData.get('notes'), date: getCurrentDateString(), timestamp: getLocalTimestampString() }; sendData('saveData', 'Leads', data, null, e); }
@@ -209,7 +211,7 @@ function showContentPage(pageId) {
   document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
   const navLink = document.querySelector(`[data-page="${pageId}"]`);
   if (navLink) navLink.classList.add('active');
-  // Tidak perlu memanggil loadPageData di sini lagi karena sudah ditangani oleh updateAllSummaries
+  loadPageData(pageId);
 }
 
 function updateDateTime() {
@@ -247,8 +249,6 @@ window.toggleSetting = function(targetId) { currentData.settings[targetId] = !cu
 // --- EVENT LISTENERS & INISIALISASI ---
 function showMessage(message, type = 'info') { const notification = document.createElement('div'); notification.className = `message ${type}`; notification.textContent = message; const mainContent = document.querySelector('.main-content'); if(mainContent) { mainContent.insertBefore(notification, mainContent.firstChild); setTimeout(() => { notification.remove(); }, 4000); } }
 function loadPageData(pageId) { 
-    // Fungsi ini sekarang hanya untuk logika spesifik halaman jika ada,
-    // karena pembaruan tabel sudah ditangani oleh updateAllSummaries.
     if (pageId === 'crm-survey') { 
         const salesNameField = document.querySelector('#crm-survey input[name="salesName"]'); 
         if (salesNameField && currentUser) salesNameField.value = currentUser.name; 
