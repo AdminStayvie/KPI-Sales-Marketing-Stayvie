@@ -34,17 +34,35 @@
         }
         .dashboard-layout {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            grid-template-columns: 1fr; /* Mengubah menjadi satu kolom agar lebih terstruktur */
             gap: var(--space-24);
         }
         .chart-container {
-            background-color: var(--color-surface);
-            padding: var(--space-20);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--color-card-border);
-            /* PERBAIKAN: Memberikan tinggi yang tetap dan posisi relatif */
             position: relative;
-            height: 400px; 
+            height: 350px; /* Menyesuaikan tinggi default */
+            width: 100%;
+        }
+        .chart-wrapper {
+            margin-bottom: var(--space-24);
+        }
+        .section-divider {
+            border: none;
+            border-top: 1px solid var(--color-border);
+            margin: var(--space-32) 0;
+        }
+        .individual-charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: var(--space-32);
+            margin-top: var(--space-16);
+        }
+        .individual-chart-container {
+            text-align: center;
+        }
+        .individual-chart-container h5 {
+            margin-bottom: var(--space-12);
+            font-size: var(--font-size-lg);
+            color: var(--color-text);
         }
     </style>
 </head>
@@ -91,7 +109,7 @@
                 <!-- Papan Peringkat Sales -->
                 <div class="leaderboard-container card">
                     <div class="card__header">
-                        <h3>Papan Peringkat Sales (Berdasarkan Jumlah Input)</h3>
+                        <h3>Papan Peringkat Sales (Berdasarkan Total Aktivitas)</h3>
                     </div>
                     <div class="card__body">
                         <div id="leaderboard" class="summary-table">
@@ -100,11 +118,30 @@
                     </div>
                 </div>
 
-                <!-- Visualisasi Grafik -->
-                <div class="chart-container">
-                    <h3>Aktivitas per Sales</h3>
-                    <canvas id="salesActivityChart"></canvas>
+                <!-- <<< PERUBAHAN BESAR: Area Visualisasi Baru >>> -->
+                <div class="card">
+                    <div class="card__header">
+                        <h3>Visualisasi Kinerja Tim</h3>
+                    </div>
+                    <div class="card__body">
+                        <!-- Chart 1: Perbandingan Aktivitas per Kategori -->
+                        <div class="chart-wrapper">
+                            <h4>Total Aktivitas per Kategori (Bulan Ini)</h4>
+                            <div class="chart-container" style="height: 300px;">
+                                <canvas id="categoryComparisonChart"></canvas>
+                            </div>
+                        </div>
+                
+                        <hr class="section-divider">
+                
+                        <!-- Charts 2: Kinerja Individual per Sales -->
+                        <h4>Rincian Aktivitas per Sales (Bulan Ini)</h4>
+                        <div id="individualSalesCharts" class="individual-charts-grid">
+                            <!-- Grafik individual akan dibuat oleh JavaScript di sini -->
+                        </div>
+                    </div>
                 </div>
+
             </div>
         </main>
     </div>
