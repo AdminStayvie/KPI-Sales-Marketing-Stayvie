@@ -1,15 +1,15 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.4.0
+ * @version 1.5.0
  *
- * Perubahan Utama (v1.4.0):
- * - PERBAIKAN BUG KRITIS: Logika pengambilan daftar sales sekarang mengumpulkan nama dari SEMUA sumber data (Leads, Canvasing, DoorToDoor, dll.), tidak hanya dari 'Leads'. Ini memastikan semua sales yang aktif akan muncul di dashboard.
- * - PENINGKATAN: Logika refresh sekarang membandingkan konten data secara keseluruhan, memastikan UI selalu update jika ada perubahan sekecil apa pun.
+ * Perubahan Utama (v1.5.0):
+ * - PERBAIKAN BUG KRITIS: Logika "Total Aktivitas" di Leaderboard dan penentuan "Sales Terbaik" sekarang menghitung SEMUA kategori data yang relevan, bukan hanya beberapa. Ini memberikan gambaran kinerja yang akurat.
+ * - PENINGKATAN VISUAL: Grafik "Aktivitas per Sales" sekarang menampilkan lebih banyak kategori data (Leads, Canvasing, Promosi) untuk memberikan wawasan yang lebih kaya.
  *
  * Perubahan Sebelumnya:
+ * - PERBAIKAN BUG: Daftar sales dikumpulkan dari semua sumber data.
  * - PERBAIKAN BUG (Race Condition): Menambahkan flag `isFetching`.
- * - PERBAIKAN BUG (Logika Refresh): Memastikan UI selalu diperbarui setiap kali data baru berhasil dimuat.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -29,6 +29,12 @@ if (currentUser.role !== 'management') {
 // =================================================================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
 const REFRESH_INTERVAL = 30000; // Interval refresh dalam milidetik (30 detik)
+
+// <<< FIX: Daftar semua kategori yang akan dihitung dalam total aktivitas
+const TRACKED_ACTIVITY_KEYS = [
+    'leads', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 
+    'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'
+];
 
 let allData = {}; // Tempat menyimpan semua data dari server
 let previousAllData = {}; // Menyimpan state data sebelumnya untuk perbandingan
@@ -63,15 +69,12 @@ async function loadInitialData(isInitialLoad = false) {
         if (result.status === 'success') {
             allData = result.data;
 
-            // Hanya update UI jika konten data yang baru berbeda dari yang lama
             if (JSON.stringify(allData) !== JSON.stringify(previousAllData)) {
                 console.log("Perubahan data terdeteksi. Memperbarui UI...");
-                previousAllData = JSON.parse(JSON.stringify(allData)); // Deep copy untuk perbandingan berikutnya
+                previousAllData = JSON.parse(JSON.stringify(allData));
 
-                // <<< FIX: Kumpulkan nama sales dari SEMUA sumber data
                 const allSalesNames = new Set();
                 for (const key in allData) {
-                    // Pastikan properti adalah array dan bukan properti lain seperti 'settings'
                     if (Array.isArray(allData[key])) {
                         allData[key].forEach(item => {
                             if (item && item.sales) {
@@ -81,7 +84,6 @@ async function loadInitialData(isInitialLoad = false) {
                     }
                 }
                 salesList = Array.from(allSalesNames);
-                // <<< END FIX
                 
                 updateAllUI();
 
@@ -90,7 +92,6 @@ async function loadInitialData(isInitialLoad = false) {
                 }
             } else {
                  if (isInitialLoad) {
-                    // Jika tidak ada perubahan tapi ini load pertama, tetap render UI
                     updateAllUI();
                     showMessage("Data berhasil dimuat.", "success");
                  }
@@ -134,9 +135,14 @@ function updateStatCards() {
     document.getElementById('totalLeads').textContent = leadsThisMonth.length;
     document.getElementById('totalCanvasing').textContent = canvasingThisMonth.length;
 
+    // <<< FIX: Hitung sales terbaik berdasarkan TOTAL aktivitas, bukan hanya leads
     const salesPerformance = {};
-    leadsThisMonth.forEach(lead => {
-        salesPerformance[lead.sales] = (salesPerformance[lead.sales] || 0) + 1;
+    salesList.forEach(salesName => {
+        let totalScore = 0;
+        TRACKED_ACTIVITY_KEYS.forEach(key => {
+            totalScore += (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
+        });
+        salesPerformance[salesName] = totalScore;
     });
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
@@ -159,7 +165,13 @@ function updateLeaderboard() {
         const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        const total = leads + canvasing + promosi;
+        
+        // <<< FIX: Hitung total dari SEMUA kategori yang dilacak
+        let total = 0;
+        TRACKED_ACTIVITY_KEYS.forEach(key => {
+            total += (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
+        });
+
         return { name: salesName, leads, canvasing, promosi, total };
     });
 
@@ -203,20 +215,29 @@ function renderSalesChart() {
 
     const monthStart = getMonthStart();
 
+    // <<< FIX: Tambahkan lebih banyak dataset ke grafik
     const chartData = {
         labels: salesList,
-        datasets: [{
-            label: 'Total Leads (Bulan Ini)',
+        datasets: [
+        {
+            label: 'Leads',
             data: salesList.map(name => (allData.leads || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
-            backgroundColor: 'rgba(50, 184, 198, 0.6)',
+            backgroundColor: 'rgba(50, 184, 198, 0.6)', // Teal
             borderColor: 'rgba(50, 184, 198, 1)',
             borderWidth: 1
         },
         {
-            label: 'Total Canvasing (Bulan Ini)',
+            label: 'Canvasing',
             data: salesList.map(name => (allData.canvasing || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
-            backgroundColor: 'rgba(94, 82, 64, 0.6)',
+            backgroundColor: 'rgba(94, 82, 64, 0.6)', // Brown
             borderColor: 'rgba(94, 82, 64, 1)',
+            borderWidth: 1
+        },
+        {
+            label: 'Promosi',
+            data: salesList.map(name => (allData.promosi || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
+            backgroundColor: 'rgba(230, 129, 97, 0.6)', // Orange
+            borderColor: 'rgba(230, 129, 97, 1)',
             borderWidth: 1
         }]
     };
@@ -231,10 +252,19 @@ function renderSalesChart() {
                     ticks: {
                         stepSize: 1
                     }
-                }
+                },
+                x: {
+                    stacked: true, // Tumpuk bar untuk menghemat ruang
+                },
             },
             responsive: true,
-            maintainAspectRatio: false
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Aktivitas per Sales (Bulan Ini)'
+                }
+            }
         }
     });
 }
@@ -263,7 +293,6 @@ function getMonthStart(date = new Date()) {
 }
 
 function showMessage(message, type = 'info') {
-    // Hapus pesan lama sebelum menampilkan yang baru
     const existingMessage = document.querySelector('.message');
     if(existingMessage) existingMessage.remove();
 
