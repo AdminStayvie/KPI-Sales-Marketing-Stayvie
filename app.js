@@ -72,6 +72,8 @@ async function loadInitialData() {
                 }
             }
             showMessage("Data berhasil dimuat.", "success");
+            
+            // Panggil semua fungsi update setelah data siap
             updateDashboard();
             updateAllSummaries();
             showContentPage('dashboard');
