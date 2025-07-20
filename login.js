@@ -1,6 +1,10 @@
 /**
  * @file login.js
  * @description Handles logic for the login page by fetching user data from Google Sheets.
+ * @version 2.0.0
+ *
+ * Perubahan Utama (v2.0.0):
+ * - ROLE-BASED REDIRECTION: Mengarahkan pengguna ke dashboard yang sesuai ('management' atau 'sales').
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,9 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const errorMessageDiv = document.getElementById('errorMessage');
 
-    // Jika pengguna sudah login di sesi sebelumnya, langsung arahkan ke dashboard.
-    if (localStorage.getItem('currentUser')) {
-        window.location.href = 'dashboard.html';
+    // Jika pengguna sudah login, langsung arahkan ke dashboard yang sesuai.
+    const loggedInUser = localStorage.getItem('currentUser');
+    if (loggedInUser) {
+        const user = JSON.parse(loggedInUser);
+        if (user.role === 'management') {
+            window.location.href = 'dashboard-manajemen.html';
+        } else {
+            window.location.href = 'dashboard.html';
+        }
     }
 
     loginForm.addEventListener('submit', async (e) => {
@@ -25,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
         errorMessageDiv.style.display = 'none';
 
-        // Payload yang akan dikirim ke Google Apps Script
         const payload = {
             action: 'login',
             username: username,
@@ -44,15 +53,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const result = await response.json();
 
-            if (result.status === 'success' && result.user) {
-                // Jika berhasil, simpan informasi pengguna ke localStorage
-                localStorage.setItem('currentUser', JSON.stringify(result.user));
+            if (result.status === 'success' && result.data.user) {
+                // Simpan informasi pengguna ke localStorage
+                localStorage.setItem('currentUser', JSON.stringify(result.data.user));
                 
-                // Arahkan ke dashboard
                 submitButton.textContent = 'Login Berhasil, Mengarahkan...';
-                window.location.href = 'dashboard.html';
+
+                // --- LOGIKA PENGALIHAN BERDASARKAN PERAN ---
+                if (result.data.user.role === 'management') {
+                    window.location.href = 'dashboard-manajemen.html';
+                } else {
+                    window.location.href = 'dashboard.html';
+                }
+
             } else {
-                // Jika gagal, tampilkan pesan error dari server
                 errorMessageDiv.textContent = result.message || 'Username atau password salah!';
                 errorMessageDiv.style.display = 'block';
                 submitButton.textContent = 'Login';
