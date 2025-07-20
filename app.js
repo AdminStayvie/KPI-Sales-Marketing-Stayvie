@@ -1,12 +1,13 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.4.0
+ * @version 2.5.0
  *
- * Perubahan Utama (v2.4.0):
- * - PERUBAHAN LOGIKA: Mengubah `timestamp` agar menggunakan zona waktu lokal (WIB), bukan UTC. Ini untuk menyamakan waktu perhitungan dengan waktu yang ditampilkan.
+ * Perubahan Utama (v2.5.0):
+ * - PERBAIKAN BUG (Fitur Hilang): Mengimplementasikan fungsi `calculateAndDisplayPenalties` untuk menghitung dan menampilkan total denda pada kartu dashboard. Logika ini sebelumnya tidak ada.
  *
  * Perubahan Sebelumnya:
+ * - PERUBAHAN LOGIKA: Mengubah `timestamp` agar menggunakan zona waktu lokal (WIB).
  * - PERUBAHAN LOGIKA: Mengubah periode perhitungan bulanan (21 - 20).
  * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk semua target menjadi 'timestamp'.
  * - PERBAIKAN BUG: Melengkapi `CONFIG.dataMapping`.
@@ -23,11 +24,9 @@ const currentUser = JSON.parse(currentUserJSON);
 // =================================================================================
 // KONFIGURASI TERPUSAT
 // =================================================================================
-// ▼▼▼ PASTIKAN ANDA MENGGANTI URL INI DENGAN URL DEPLOYMENT TERBARU ANDA ▼▼▼
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- GANTI DENGAN URL BARU ANDA
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
 
 const CONFIG = {
-    // Definisikan semua target di sini
     targets: {
         daily: [
             { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'timestamp' },
@@ -50,7 +49,6 @@ const CONFIG = {
             { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' }
         ]
     },
-    // Pemetaan nama sheet ke kunci data dan konfigurasi tabel ringkasan
     dataMapping: {
         'Leads': { dataKey: 'leads', headers: ['Waktu', 'Customer', 'Sumber', 'Produk'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td>` },
         'Canvasing': { dataKey: 'canvasing', headers: ['Waktu', 'Judul Meeting', 'File'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>` },
@@ -70,7 +68,6 @@ const CONFIG = {
 let currentData = {
     settings: {}
 };
-// Inisialisasi semua kunci data dari mapping agar tidak error
 Object.values(CONFIG.dataMapping).forEach(map => {
     currentData[map.dataKey] = [];
 });
@@ -78,11 +75,6 @@ Object.values(CONFIG.dataMapping).forEach(map => {
 // =================================================================================
 // FUNGSI INTI (Core Functions)
 // =================================================================================
-
-/**
- * Mengirim data ke Google Apps Script.
- * Fungsi ini menangani logika loading state dan menampilkan pesan.
- */
 async function sendData(action, sheetName, data, fileInput, event) {
     const button = event.target.querySelector('button[type="submit"]');
     const originalButtonText = button.innerHTML;
@@ -112,7 +104,9 @@ async function sendData(action, sheetName, data, fileInput, event) {
             showMessage('Data berhasil disimpan!', 'success');
             const dataKey = CONFIG.dataMapping[sheetName]?.dataKey;
             if (dataKey) {
-                currentData[dataKey].push(result.data);
+                // Pastikan data yang diterima memiliki struktur yang benar
+                const newData = result.data || data;
+                currentData[dataKey].push(newData);
             }
             updateAllUI();
             event.target.reset();
@@ -128,9 +122,6 @@ async function sendData(action, sheetName, data, fileInput, event) {
     }
 }
 
-/**
- * Memuat semua data awal dari server.
- */
 async function loadInitialData() {
     showMessage("Memuat data dari server...", "info");
     try {
@@ -139,7 +130,7 @@ async function loadInitialData() {
         if (result.status === 'success') {
             for (const key in result.data) {
                 if (currentData.hasOwnProperty(key)) {
-                    currentData[key] = result.data[key];
+                    currentData[key] = result.data[key] || [];
                 }
             }
             showMessage("Data berhasil dimuat.", "success");
@@ -157,11 +148,6 @@ async function loadInitialData() {
 // =================================================================================
 // FORM HANDLING (Dinamis)
 // =================================================================================
-
-/**
- * Satu fungsi untuk menangani semua pengiriman form.
- * Membaca nama sheet dari atribut `data-sheet-name` pada form.
- */
 function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -199,6 +185,8 @@ function handleFormSubmit(e) {
 function updateAllUI() {
     updateDashboard();
     updateAllSummaries();
+    // <<< FIX: Panggil fungsi kalkulasi denda
+    calculateAndDisplayPenalties(); 
     if (currentUser.role === 'management') {
         updateAdminSettings();
     }
@@ -206,7 +194,11 @@ function updateAllUI() {
 
 function getFilteredData(dataType) {
     const data = currentData[dataType] || [];
-    return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name);
+    // Untuk manajemen, tampilkan semua data. Untuk sales, filter berdasarkan nama.
+    if (currentUser.role === 'management') {
+        return data;
+    }
+    return data.filter(d => d.sales === currentUser.name);
 }
 
 function calculateAchievementForTarget(target) {
@@ -218,16 +210,20 @@ function calculateAchievementForTarget(target) {
     const monthStart = getMonthStart(today);
 
     return data.filter(d => {
-        const itemDate = new Date(d[target.dateField]);
+        // Pastikan ada data tanggal dan valid
+        const itemDateStr = d[target.dateField];
+        if (!itemDateStr) return false;
+        const itemDate = new Date(itemDateStr);
         if (isNaN(itemDate.getTime())) return false;
 
-        if (CONFIG.targets.daily.some(t => t.id === target.id)) {
+        // Cek periode berdasarkan tipe target
+        if (CONFIG.targets.daily.includes(target)) {
             return itemDate.toDateString() === today.toDateString();
         }
-        if (CONFIG.targets.weekly.some(t => t.id === target.id)) {
+        if (CONFIG.targets.weekly.includes(target)) {
             return itemDate >= weekStart && itemDate <= today;
         }
-        if (CONFIG.targets.monthly.some(t => t.id === target.id)) {
+        if (CONFIG.targets.monthly.includes(target)) {
             return itemDate >= monthStart && itemDate <= today;
         }
         return false;
@@ -242,8 +238,10 @@ function updateDashboard() {
 
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
+            // Hanya hitung jika target aktif (berdasarkan settings)
             if (currentData.settings[target.id]) {
-                achievements[period] += calculateAchievementForTarget(target);
+                const achieved = calculateAchievementForTarget(target);
+                achievements[period] += achieved;
                 totals[period] += target.target;
             }
         });
@@ -253,48 +251,107 @@ function updateDashboard() {
     updateTargetBreakdown();
 }
 
+/**
+ * <<< FIX: Fungsi baru untuk menghitung dan menampilkan denda.
+ * Menghitung total denda berdasarkan target yang tidak tercapai.
+ * Fungsi ini hanya berjalan untuk peran 'sales'.
+ */
+function calculateAndDisplayPenalties() {
+    const penaltyElement = document.getElementById('totalPenalty');
+    if (!penaltyElement || currentUser.role !== 'sales') {
+        if(penaltyElement) penaltyElement.textContent = formatCurrency(0);
+        return;
+    }
+
+    let totalPenalty = 0;
+    const today = new Date();
+
+    // Hanya hitung denda harian jika sudah lewat jam cutoff
+    if (!isWithinCutoffTime()) {
+        CONFIG.targets.daily.forEach(target => {
+            if (currentData.settings[target.id]) {
+                const achieved = calculateAchievementForTarget(target);
+                if (achieved < target.target) {
+                    totalPenalty += target.penalty;
+                }
+            }
+        });
+    }
+
+    // Hanya hitung denda mingguan di akhir minggu (misal: hari Minggu)
+    if (today.getDay() === 0) { 
+        CONFIG.targets.weekly.forEach(target => {
+            if (currentData.settings[target.id]) {
+                const achieved = calculateAchievementForTarget(target);
+                if (achieved < target.target) {
+                    totalPenalty += target.penalty;
+                }
+            }
+        });
+    }
+    
+    // Hanya hitung denda bulanan di akhir periode (tanggal 20)
+    if (today.getDate() === 20) {
+        CONFIG.targets.monthly.forEach(target => {
+            if (currentData.settings[target.id]) {
+                const achieved = calculateAchievementForTarget(target);
+                if (achieved < target.target) {
+                    totalPenalty += target.penalty;
+                }
+            }
+        });
+    }
+
+    penaltyElement.textContent = formatCurrency(totalPenalty);
+}
+
+
 function updateTargetBreakdown() {
     const container = document.getElementById('targetBreakdown');
     if (!container) return;
     container.innerHTML = '';
     
     ['daily', 'weekly', 'monthly'].forEach(period => {
+        const activeTargets = CONFIG.targets[period].filter(t => currentData.settings[t.id]);
+        if (activeTargets.length === 0) return;
+
         const header = document.createElement('h4');
         header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
         container.appendChild(header);
 
-        CONFIG.targets[period].forEach(target => {
-            if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target);
-                const status = achieved >= target.target ? 'completed' : 'pending';
-                const item = document.createElement('div');
-                item.className = 'target-item';
-                item.innerHTML = `
-                    <div class="target-name">${target.name}</div>
-                    <div class="target-progress">
-                        <span>${achieved}/${target.target}</span>
-                        <span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span>
-                    </div>`;
-                container.appendChild(item);
-            }
+        activeTargets.forEach(target => {
+            const achieved = calculateAchievementForTarget(target);
+            const status = achieved >= target.target ? 'completed' : 'pending';
+            const item = document.createElement('div');
+            item.className = 'target-item';
+            item.innerHTML = `
+                <div class="target-name">${target.name}</div>
+                <div class="target-progress">
+                    <span>${achieved}/${target.target}</span>
+                    <span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span>
+                </div>`;
+            container.appendChild(item);
         });
     });
 }
 
 function updateProgressBar(type, achieved, total) {
-    const percentage = total > 0 ? Math.round((achieved / total) * 100) : 0;
-    document.getElementById(`${type}Progress`).style.width = `${percentage}%`;
-    document.getElementById(`${type}Percentage`).textContent = `${percentage}%`;
-    document.getElementById(`${type}Achieved`).textContent = achieved;
-    document.getElementById(`${type}Total`).textContent = total;
+    const percentage = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0;
+    const bar = document.getElementById(`${type}Progress`);
+    const percText = document.getElementById(`${type}Percentage`);
+    const achievedText = document.getElementById(`${type}Achieved`);
+    const totalText = document.getElementById(`${type}Total`);
+
+    if(bar) bar.style.width = `${percentage}%`;
+    if(percText) percText.textContent = `${percentage}%`;
+    if(achievedText) achievedText.textContent = achieved;
+    if(totalText) totalText.textContent = total;
 }
 
 function updateSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
-    if (!container) {
-        return;
-    }
+    if (!container) return;
     
     const userSpecificData = getFilteredData(mapping.dataKey);
 
@@ -316,7 +373,6 @@ function updateSummaryTable(sheetName, mapping) {
 }
 
 function updateAllSummaries() {
-    // PERBAIKAN TYPO: dataMappin -> dataMapping
     for (const sheetName in CONFIG.dataMapping) {
         updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName]);
     }
@@ -347,7 +403,7 @@ function updateAdminSettings() {
 
 window.toggleSetting = function(targetId) {
     currentData.settings[targetId] = !currentData.settings[targetId];
-    updateDashboard();
+    updateAllUI(); // Panggil updateAllUI agar semua kalkulasi diperbarui
     showMessage('Pengaturan disimpan (hanya di sesi ini).', 'info');
 };
 
@@ -360,10 +416,6 @@ function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style:
 function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); if (isNaN(date.getTime())) return 'Invalid Date'; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
 function getCurrentDateString() { const today = new Date(); return today.toISOString().split('T')[0]; }
 
-/**
- * Membuat string timestamp dalam format ISO 8601 dengan zona waktu lokal (WIB).
- * Ini memastikan konsistensi antara data yang dihitung dan yang ditampilkan.
- */
 function getLocalTimestampString() {
     const now = new Date();
     const year = now.getFullYear();
@@ -384,27 +436,18 @@ function getLocalTimestampString() {
 function getDatestamp() { const now = new Date(); return now.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
 
-/**
- * Menghitung tanggal mulai periode KPI bulanan.
- * Periode dihitung dari tanggal 21 bulan lalu hingga tanggal 20 bulan ini.
- */
 function getMonthStart(date = new Date()) {
     const today = new Date(date);
     const currentDay = today.getDate();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     
-    // Tanggal batas (cutoff) adalah tanggal 20.
     const cutoffDay = 20;
-
     let startDate;
 
     if (currentDay > cutoffDay) {
-        // Jika hari ini setelah tanggal 20, periode baru dimulai dari tanggal 21 bulan ini.
         startDate = new Date(currentYear, currentMonth, 21);
     } else {
-        // Jika hari ini tanggal 20 atau sebelumnya, kita masih di periode bulan lalu.
-        // Periode dimulai dari tanggal 21 bulan sebelumnya.
         const previousMonth = new Date(currentYear, currentMonth, 1);
         previousMonth.setMonth(previousMonth.getMonth() - 1);
         startDate = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 21);
@@ -473,5 +516,4 @@ function initializeApp() {
     loadInitialData();
 }
 
-// --- JALANKAN APLIKASI ---
 document.addEventListener('DOMContentLoaded', initializeApp);
