@@ -114,6 +114,7 @@ async function sendData(action, sheetName, data, fileInput, event) {
   }
 }
 
+// --- PERBAIKAN DI SINI ---
 // Fungsi untuk memuat semua data awal dari Google Sheet
 async function loadInitialData() {
     if (SCRIPT_URL.includes("URL_WEB_APP_APPS_SCRIPT_ANDA")) {
@@ -125,9 +126,16 @@ async function loadInitialData() {
         const response = await fetch(`${SCRIPT_URL}?action=getAllData`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            for (const key in currentData) {
-                if (key !== 'settings' && result.data[key]) currentData[key] = result.data[key];
+            // Loop melalui data yang diterima dari server
+            for (const serverKey in result.data) {
+                // Ubah kunci dari server (PascalCase) menjadi kunci lokal (camelCase)
+                const localKey = serverKey.charAt(0).toLowerCase() + serverKey.slice(1);
+                // Jika kunci lokal ada di currentData, salin datanya
+                if (currentData.hasOwnProperty(localKey)) {
+                    currentData[localKey] = result.data[serverKey];
+                }
             }
+            
             showMessage("Data berhasil dimuat.", "success");
             
             updateDashboard();
@@ -140,6 +148,7 @@ async function loadInitialData() {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     }
 }
+// --- AKHIR PERBAIKAN ---
 
 // Fungsi untuk memperbarui semua tabel ringkasan sekaligus
 function updateAllSummaries() {
