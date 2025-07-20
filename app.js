@@ -1,18 +1,16 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.3.0
+ * @version 2.4.0
  *
- * Perubahan Utama (v2.3.0):
- * - PERUBAHAN LOGIKA: Mengubah periode perhitungan bulanan. Sekarang dihitung dari tanggal 21 bulan sebelumnya hingga tanggal 20 bulan ini.
+ * Perubahan Utama (v2.4.0):
+ * - PERUBAHAN LOGIKA: Mengubah `timestamp` agar menggunakan zona waktu lokal (WIB), bukan UTC. Ini untuk menyamakan waktu perhitungan dengan waktu yang ditampilkan.
  *
  * Perubahan Sebelumnya:
- * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk beberapa target (seperti Launch Campaign) menjadi 'timestamp' agar perhitungan KPI didasarkan pada waktu input, bukan tanggal acara/kampanye.
- * - PERBAIKAN BUG: Memperbaiki typo di fungsi `updateAllSummaries` (dataMappin -> dataMapping).
- * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang.
- * - KONFIGURASI TERPUSAT: Semua target, nama sheet, dan pemetaan data ada di satu objek `CONFIG`.
- * - FORM HANDLER TUNGGAL: Satu fungsi `handleFormSubmit` untuk menangani semua form.
- * - PERHITUNGAN DINAMIS: Logika kalkulasi KPI tidak lagi menggunakan `switch-case` statis.
+ * - PERUBAHAN LOGIKA: Mengubah periode perhitungan bulanan (21 - 20).
+ * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk semua target menjadi 'timestamp'.
+ * - PERBAIKAN BUG: Melengkapi `CONFIG.dataMapping`.
+ * - KONFIGURASI TERPUSAT, FORM HANDLER TUNGGAL, PERHITUNGAN DINAMIS.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -361,7 +359,28 @@ function toBase64(file) { return new Promise((resolve, reject) => { const reader
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
 function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); if (isNaN(date.getTime())) return 'Invalid Date'; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
 function getCurrentDateString() { const today = new Date(); return today.toISOString().split('T')[0]; }
-function getLocalTimestampString() { const now = new Date(); return now.toISOString(); }
+
+/**
+ * Membuat string timestamp dalam format ISO 8601 dengan zona waktu lokal (WIB).
+ * Ini memastikan konsistensi antara data yang dihitung dan yang ditampilkan.
+ */
+function getLocalTimestampString() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
+    
+    const timezoneOffset = -now.getTimezoneOffset();
+    const offsetSign = timezoneOffset >= 0 ? '+' : '-';
+    const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60).toString().padStart(2, '0');
+    const offsetMinutes = (Math.abs(timezoneOffset) % 60).toString().padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetSign}${offsetHours}:${offsetMinutes}`;
+}
+
 function getDatestamp() { const now = new Date(); return now.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
 
