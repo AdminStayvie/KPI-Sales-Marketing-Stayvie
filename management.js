@@ -1,6 +1,10 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
+ * @version 1.1.0
+ *
+ * Perubahan Utama (v1.1.0):
+ * - PERBAIKAN BUG: Mencegah render loop pada grafik dengan menghancurkan instance grafik lama sebelum membuat yang baru.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -21,6 +25,7 @@ if (currentUser.role !== 'management') {
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
 let allData = {}; // Tempat menyimpan semua data dari server
 let salesList = []; // Daftar semua sales
+let salesChartInstance = null; // PERBAIKAN: Variabel untuk menyimpan instance grafik
 
 // =================================================================================
 // FUNGSI UTAMA
@@ -134,6 +139,12 @@ function updateLeaderboard() {
  */
 function renderSalesChart() {
     const ctx = document.getElementById('salesActivityChart').getContext('2d');
+    
+    // PERBAIKAN: Hancurkan grafik lama jika sudah ada
+    if (salesChartInstance) {
+        salesChartInstance.destroy();
+    }
+
     const chartData = {
         labels: salesList,
         datasets: [{
@@ -152,7 +163,8 @@ function renderSalesChart() {
         }]
     };
 
-    new Chart(ctx, {
+    // PERBAIKAN: Simpan instance grafik yang baru
+    salesChartInstance = new Chart(ctx, {
         type: 'bar',
         data: chartData,
         options: {
