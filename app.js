@@ -133,16 +133,39 @@ function updateDateTime() { const now = new Date(); const dateTimeElement = docu
 
 // --- LOGIKA KALKULASI & UPDATE UI ---
 function getFilteredData(dataType) { const data = currentData[dataType] || []; return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name); }
+
+// --- PERBAIKAN DI SINI ---
 function calculateAchievementForTarget(targetId) {
     const today = getCurrentDateString();
     const weekStart = getWeekStart();
+    const monthStart = getMonthStart();
+
     switch(targetId) {
+        // Daily
         case 1: return getFilteredData('leads').filter(d => d.date && d.date.startsWith(today)).length;
+        case 2: return 0; // 'Konversi Lead' - Belum ada form
         case 3: return getFilteredData('promosi').filter(d => d.date && d.date.startsWith(today)).length;
+        
+        // Weekly
         case 4: return getFilteredData('canvasing').filter(d => d.date && new Date(d.date) >= weekStart).length;
+        case 5: return getFilteredData('doorToDoor').filter(d => d.visitDate && new Date(d.visitDate) >= weekStart).length;
+        case 6: return getFilteredData('quotations').filter(d => d.date && new Date(d.date) >= weekStart).length;
+        case 7: return getFilteredData('surveys').filter(d => d.surveyDate && new Date(d.surveyDate) >= weekStart).length;
+        case 8: return getFilteredData('reports').filter(d => d.timestamp && new Date(d.timestamp) >= weekStart).length;
+        case 9: return getFilteredData('crmSurveys').filter(d => d.timestamp && new Date(d.timestamp) >= weekStart).length;
+        case 10: return getFilteredData('conversions').filter(d => d.eventDate && new Date(d.eventDate) >= weekStart).length;
+
+        // Monthly
+        case 11: return 0; // 'Konversi B2B' - Belum ada form
+        case 12: return 0; // 'Konversi Venue' - Belum ada form
+        case 13: return getFilteredData('events').filter(d => d.eventDate && new Date(d.eventDate) >= monthStart).length;
+        case 14: return getFilteredData('campaigns').filter(d => d.campaignStartDate && new Date(d.campaignStartDate) >= monthStart).length;
+
         default: return 0;
     }
 }
+// --- AKHIR PERBAIKAN ---
+
 function calculateDailyAchievements() { return appData.daily_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
 function calculateWeeklyAchievements() { return appData.weekly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
 function calculateMonthlyAchievements() { return appData.monthly_targets.reduce((total, target) => total + calculateAchievementForTarget(target.id), 0); }
@@ -191,7 +214,6 @@ function updateProgressBar(type, achieved, total) { const percentage = total > 0
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
 function getMonthStart(date = new Date()) { return new Date(date.getFullYear(), date.getMonth(), 1); }
 
-// --- PERBAIKAN DI SINI: SEMUA FUNGSI SUMMARY DIKEMBALIKAN ---
 function updateAllSummaries() {
     updateLeadsSummary(); updateCanvasingSummary(); updatePromosiSummary();
     updateDoorToDoorSummary(); updateQuotationsSummary(); updateSurveysSummary();
