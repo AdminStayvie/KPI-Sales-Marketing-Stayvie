@@ -1,15 +1,17 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.5.0
+ * @version 1.6.0
  *
- * Perubahan Utama (v1.5.0):
- * - PERBAIKAN BUG KRITIS: Logika "Total Aktivitas" di Leaderboard dan penentuan "Sales Terbaik" sekarang menghitung SEMUA kategori data yang relevan, bukan hanya beberapa. Ini memberikan gambaran kinerja yang akurat.
- * - PENINGKATAN VISUAL: Grafik "Aktivitas per Sales" sekarang menampilkan lebih banyak kategori data (Leads, Canvasing, Promosi) untuk memberikan wawasan yang lebih kaya.
+ * Perubahan Utama (v1.6.0):
+ * - RESTRUKTURISASI VISUAL: Mengganti satu grafik yang ramai dengan beberapa visualisasi yang lebih fokus.
+ * 1. Grafik Batang Perbandingan Kategori: Membandingkan total input untuk setiap kategori di seluruh tim.
+ * 2. Grafik Donat Individual: Menampilkan rincian aktivitas untuk setiap sales secara terpisah.
+ * - PENINGKATAN KINERJA: Manajemen instance chart yang lebih baik untuk mencegah kebocoran memori.
  *
  * Perubahan Sebelumnya:
+ * - PERBAIKAN BUG: Logika "Total Aktivitas" dan "Sales Terbaik" sekarang menghitung semua kategori data.
  * - PERBAIKAN BUG: Daftar sales dikumpulkan dari semua sumber data.
- * - PERBAIKAN BUG (Race Condition): Menambahkan flag `isFetching`.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -18,7 +20,6 @@ if (!currentUserJSON) {
     window.location.href = 'index.html';
 }
 const currentUser = JSON.parse(currentUserJSON);
-// Pastikan hanya manajemen yang bisa mengakses halaman ini
 if (currentUser.role !== 'management') {
     alert('Akses ditolak. Halaman ini hanya untuk manajemen.');
     window.location.href = 'dashboard.html';
@@ -27,39 +28,36 @@ if (currentUser.role !== 'management') {
 // =================================================================================
 // KONFIGURASI & STATE
 // =================================================================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
-const REFRESH_INTERVAL = 30000; // Interval refresh dalam milidetik (30 detik)
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
+const REFRESH_INTERVAL = 30000;
 
-// <<< FIX: Daftar semua kategori yang akan dihitung dalam total aktivitas
 const TRACKED_ACTIVITY_KEYS = [
     'leads', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 
     'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'
 ];
 
-let allData = {}; // Tempat menyimpan semua data dari server
-let previousAllData = {}; // Menyimpan state data sebelumnya untuk perbandingan
-let salesList = []; // Daftar semua sales
-let salesChartInstance = null; // Variabel untuk menyimpan instance grafik
-let isFetching = false; // Flag untuk mencegah race condition
+const CHART_COLORS = [
+    'rgba(50, 184, 198, 0.7)', 'rgba(94, 82, 64, 0.7)', 'rgba(230, 129, 97, 0.7)',
+    'rgba(255, 205, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)',
+    'rgba(255, 159, 64, 0.7)', 'rgba(201, 203, 207, 0.7)', 'rgba(54, 162, 235, 0.7)',
+    'rgba(255, 99, 132, 0.7)', 'rgba(12, 65, 99, 0.7)'
+];
+
+let allData = {};
+let previousAllData = {};
+let salesList = [];
+let chartInstances = {}; // Menyimpan semua instance grafik untuk dihancurkan nanti
+let isFetching = false;
 
 // =================================================================================
 // FUNGSI UTAMA
 // =================================================================================
 
-/**
- * Memuat semua data dari server.
- * @param {boolean} isInitialLoad - Menandakan apakah ini pemuatan pertama kali.
- */
 async function loadInitialData(isInitialLoad = false) {
-    if (isFetching) {
-        console.log("Pemuatan data sedang berlangsung, permintaan baru diabaikan.");
-        return;
-    }
+    if (isFetching) return;
     isFetching = true;
 
-    if (isInitialLoad) {
-        showMessage("Memuat data tim dari server...", "info");
-    }
+    if (isInitialLoad) showMessage("Memuat data tim dari server...", "info");
     
     try {
         const fetchUrl = `${SCRIPT_URL}?action=getAllData&t=${new Date().getTime()}`;
@@ -68,64 +66,41 @@ async function loadInitialData(isInitialLoad = false) {
 
         if (result.status === 'success') {
             allData = result.data;
-
             if (JSON.stringify(allData) !== JSON.stringify(previousAllData)) {
-                console.log("Perubahan data terdeteksi. Memperbarui UI...");
                 previousAllData = JSON.parse(JSON.stringify(allData));
-
+                
                 const allSalesNames = new Set();
-                for (const key in allData) {
-                    if (Array.isArray(allData[key])) {
-                        allData[key].forEach(item => {
-                            if (item && item.sales) {
-                                allSalesNames.add(item.sales);
-                            }
-                        });
-                    }
-                }
+                TRACKED_ACTIVITY_KEYS.forEach(key => {
+                    (allData[key] || []).forEach(item => item.sales && allSalesNames.add(item.sales));
+                });
                 salesList = Array.from(allSalesNames);
                 
                 updateAllUI();
-
-                if (isInitialLoad) {
-                    showMessage("Data berhasil dimuat.", "success");
-                }
-            } else {
-                 if (isInitialLoad) {
-                    updateAllUI();
-                    showMessage("Data berhasil dimuat.", "success");
-                 }
+                if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
+            } else if (isInitialLoad) {
+                updateAllUI();
+                showMessage("Data berhasil dimuat.", "success");
             }
         } else {
             if (isInitialLoad) throw new Error(result.message);
-            else console.error("Auto-refresh failed:", result.message);
         }
     } catch (error) {
-        console.error('Error loading initial data:', error);
-        if (isInitialLoad) {
-            showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
-        }
+        if (isInitialLoad) showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     } finally {
         isFetching = false;
     }
 }
 
-/**
- * Memanggil semua fungsi untuk memperbarui UI.
- */
 function updateAllUI() {
     updateStatCards();
     updateLeaderboard();
-    renderSalesChart();
+    renderVisualizations(); // Fungsi render utama yang baru
 }
 
 // =================================================================================
 // FUNGSI UPDATE UI
 // =================================================================================
 
-/**
- * Memperbarui kartu statistik utama.
- */
 function updateStatCards() {
     const monthStart = getMonthStart();
     
@@ -135,140 +110,152 @@ function updateStatCards() {
     document.getElementById('totalLeads').textContent = leadsThisMonth.length;
     document.getElementById('totalCanvasing').textContent = canvasingThisMonth.length;
 
-    // <<< FIX: Hitung sales terbaik berdasarkan TOTAL aktivitas, bukan hanya leads
     const salesPerformance = {};
     salesList.forEach(salesName => {
-        let totalScore = 0;
-        TRACKED_ACTIVITY_KEYS.forEach(key => {
-            totalScore += (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        });
-        salesPerformance[salesName] = totalScore;
+        salesPerformance[salesName] = TRACKED_ACTIVITY_KEYS.reduce((total, key) => 
+            total + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
     });
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
     document.getElementById('topSales').textContent = topSales;
-
     document.getElementById('totalPenalty').textContent = 'Rp 0';
 }
 
-
-/**
- * Membuat dan memperbarui tabel papan peringkat.
- */
 function updateLeaderboard() {
     const container = document.getElementById('leaderboard');
     if (!container) return;
-
     const monthStart = getMonthStart();
 
     const leaderboardData = salesList.map(salesName => {
         const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        
-        // <<< FIX: Hitung total dari SEMUA kategori yang dilacak
-        let total = 0;
-        TRACKED_ACTIVITY_KEYS.forEach(key => {
-            total += (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        });
-
+        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => 
+            acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
         return { name: salesName, leads, canvasing, promosi, total };
     });
 
     leaderboardData.sort((a, b) => b.total - a.total);
 
-    let tableHTML = `
+    container.innerHTML = `
         <table>
-            <thead>
-                <tr>
-                    <th>Nama Sales</th>
-                    <th>Leads</th>
-                    <th>Canvasing</th>
-                    <th>Promosi</th>
-                    <th>Total Aktivitas</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${leaderboardData.map(sales => `
-                    <tr>
-                        <td>${sales.name}</td>
-                        <td>${sales.leads}</td>
-                        <td>${sales.canvasing}</td>
-                        <td>${sales.promosi}</td>
-                        <td><strong>${sales.total}</strong></td>
-                    </tr>
-                `).join('')}
-            </tbody>
+            <thead><tr><th>Nama Sales</th><th>Leads</th><th>Canvasing</th><th>Promosi</th><th>Total Aktivitas</th></tr></thead>
+            <tbody>${leaderboardData.map(s => `<tr><td>${s.name}</td><td>${s.leads}</td><td>${s.canvasing}</td><td>${s.promosi}</td><td><strong>${s.total}</strong></td></tr>`).join('')}</tbody>
         </table>`;
-    container.innerHTML = tableHTML;
+}
+
+// =================================================================================
+// <<< FUNGSI VISUALISASI BARU >>>
+// =================================================================================
+
+function destroyAllCharts() {
+    for (const chartId in chartInstances) {
+        if (chartInstances[chartId]) {
+            chartInstances[chartId].destroy();
+        }
+    }
+    chartInstances = {};
+}
+
+function renderVisualizations() {
+    destroyAllCharts();
+    renderCategoryComparisonChart();
+    renderIndividualSalesCharts();
 }
 
 /**
- * Merender grafik aktivitas sales.
+ * Membuat grafik batang untuk membandingkan total aktivitas per kategori.
  */
-function renderSalesChart() {
-    const ctx = document.getElementById('salesActivityChart').getContext('2d');
-    
-    if (salesChartInstance) {
-        salesChartInstance.destroy();
-    }
-
+function renderCategoryComparisonChart() {
+    const ctx = document.getElementById('categoryComparisonChart')?.getContext('2d');
+    if (!ctx) return;
     const monthStart = getMonthStart();
 
-    // <<< FIX: Tambahkan lebih banyak dataset ke grafik
-    const chartData = {
-        labels: salesList,
-        datasets: [
-        {
-            label: 'Leads',
-            data: salesList.map(name => (allData.leads || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
-            backgroundColor: 'rgba(50, 184, 198, 0.6)', // Teal
-            borderColor: 'rgba(50, 184, 198, 1)',
-            borderWidth: 1
-        },
-        {
-            label: 'Canvasing',
-            data: salesList.map(name => (allData.canvasing || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
-            backgroundColor: 'rgba(94, 82, 64, 0.6)', // Brown
-            borderColor: 'rgba(94, 82, 64, 1)',
-            borderWidth: 1
-        },
-        {
-            label: 'Promosi',
-            data: salesList.map(name => (allData.promosi || []).filter(d => d.sales === name && new Date(d.timestamp) >= monthStart).length),
-            backgroundColor: 'rgba(230, 129, 97, 0.6)', // Orange
-            borderColor: 'rgba(230, 129, 97, 1)',
-            borderWidth: 1
-        }]
-    };
+    const data = TRACKED_ACTIVITY_KEYS.map(key => 
+        (allData[key] || []).filter(d => new Date(d.timestamp) >= monthStart).length
+    );
 
-    salesChartInstance = new Chart(ctx, {
+    chartInstances.categoryComparison = new Chart(ctx, {
         type: 'bar',
-        data: chartData,
+        data: {
+            labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)),
+            datasets: [{
+                label: 'Total Input',
+                data: data,
+                backgroundColor: CHART_COLORS,
+            }]
+        },
         options: {
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        stepSize: 1
-                    }
-                },
-                x: {
-                    stacked: true, // Tumpuk bar untuk menghemat ruang
-                },
-            },
+            indexAxis: 'y', // Membuat bar menjadi horizontal
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Aktivitas per Sales (Bulan Ini)'
-                }
-            }
+            plugins: { legend: { display: false } }
         }
     });
 }
 
+/**
+ * Membuat grafik donat untuk setiap sales.
+ */
+function renderIndividualSalesCharts() {
+    const container = document.getElementById('individualSalesCharts');
+    if (!container) return;
+    container.innerHTML = ''; // Kosongkan kontainer
+    const monthStart = getMonthStart();
+
+    salesList.forEach(salesName => {
+        const chartData = [];
+        const chartLabels = [];
+
+        TRACKED_ACTIVITY_KEYS.forEach(key => {
+            const count = (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
+            if (count > 0) {
+                chartData.push(count);
+                chartLabels.push(key.charAt(0).toUpperCase() + key.slice(1));
+            }
+        });
+
+        // Hanya buat grafik jika ada data
+        if (chartData.length > 0) {
+            const chartId = `salesChart_${salesName.replace(/\s+/g, '')}`;
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'individual-chart-container';
+            chartContainer.innerHTML = `
+                <h5>${salesName}</h5>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="${chartId}"></canvas>
+                </div>`;
+            container.appendChild(chartContainer);
+
+            const ctx = document.getElementById(chartId).getContext('2d');
+            chartInstances[chartId] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        data: chartData,
+                        backgroundColor: CHART_COLORS,
+                        borderColor: 'var(--color-surface)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                boxWidth: 12
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
 
 // =================================================================================
 // FUNGSI UTILITY & INISIALISASI
@@ -295,7 +282,6 @@ function getMonthStart(date = new Date()) {
 function showMessage(message, type = 'info') {
     const existingMessage = document.querySelector('.message');
     if(existingMessage) existingMessage.remove();
-
     const notification = document.createElement('div');
     notification.className = `message ${type}`;
     notification.textContent = message;
@@ -323,7 +309,6 @@ function initializeApp() {
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     updateDateTime();
     setInterval(updateDateTime, 60000);
-
     loadInitialData(true); 
     setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
 }
