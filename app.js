@@ -1,14 +1,13 @@
 /**
  * @file app.js
- * @description Logika utama untuk dashboard KPI (Versi Optimal).
- * @version 2.0.0
+ * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
+ * @version 2.1.0
  *
- * Perubahan Utama:
+ * Perubahan Utama (v2.1.0):
+ * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang. Ini memperbaiki bug di mana data untuk "Surveys" dan seterusnya tidak ditampilkan.
  * - KONFIGURASI TERPUSAT: Semua target, nama sheet, dan pemetaan data ada di satu objek `CONFIG`.
- * - FORM HANDLER TUNGGAL: Satu fungsi `handleFormSubmit` untuk menangani semua form, mengurangi duplikasi kode secara drastis.
- * - PERHITUNGAN DINAMIS: Logika kalkulasi KPI tidak lagi menggunakan `switch-case` statis, melainkan berdasarkan konfigurasi.
- * - PEMBARUAN UI DINAMIS: Fungsi untuk membuat tabel ringkasan kini sepenuhnya dinamis berdasarkan `CONFIG`.
- * - KODE LEBIH BERSIH: Menggunakan praktik JavaScript modern untuk keterbacaan dan pemeliharaan.
+ * - FORM HANDLER TUNGGAL: Satu fungsi `handleFormSubmit` untuk menangani semua form.
+ * - PERHITUNGAN DINAMIS: Logika kalkulasi KPI tidak lagi menggunakan `switch-case` statis.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -21,14 +20,14 @@ const currentUser = JSON.parse(currentUserJSON);
 // =================================================================================
 // KONFIGURASI TERPUSAT
 // =================================================================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQ4U8l7V2r1sH7FqTqG9x-8YjZk5rJ3vD6nC4mB3sA/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
 
 const CONFIG = {
     // Definisikan semua target di sini
     targets: {
         daily: [
             { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'date' },
-            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', dateField: 'date' }, // Contoh, perlu data 'prospects'
+            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', dateField: 'date' },
             { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', dateField: 'date' }
         ],
         weekly: [
@@ -41,8 +40,8 @@ const CONFIG = {
             { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', dateField: 'eventDate' }
         ],
         monthly: [
-            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'date' }, // Contoh
-            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'date' }, // Contoh
+            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'date' },
+            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'date' },
             { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'eventDate' },
             { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'campaignStartDate' }
         ]
@@ -54,7 +53,13 @@ const CONFIG = {
         'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td>` },
         'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td>` },
         'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td>` },
-        // ... Tambahkan pemetaan lain di sini sesuai kebutuhan
+        // --- PENAMBAHAN: Mapping untuk semua sheet yang tersisa ---
+        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td>` },
+        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>` },
+        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td>` },
+        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td>` },
+        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td>` },
+        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td>` },
     }
 };
 
@@ -293,7 +298,7 @@ function updateSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) {
-        console.warn(`Elemen kontainer dengan ID '${containerId}' tidak ditemukan.`);
+        // Ini bukan error, mungkin halaman tidak memiliki tabel ringkasan untuk data ini
         return;
     }
     
@@ -318,7 +323,7 @@ function updateSummaryTable(sheetName, mapping) {
 
 function updateAllSummaries() {
     for (const sheetName in CONFIG.dataMapping) {
-        updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName]);
+        updateSummaryTable(sheetName, CONFIG.dataMappin[sheetName]);
     }
 }
 
@@ -357,7 +362,7 @@ window.toggleSetting = function(targetId) {
 // =================================================================================
 function toBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = error => reject(error); }); }
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
-function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
+function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); if (isNaN(date.getTime())) return 'Invalid Date'; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
 function getCurrentDateString() { const today = new Date(); return today.toISOString().split('T')[0]; }
 function getLocalTimestampString() { const now = new Date(); return now.toISOString(); }
 function getDatestamp() { const now = new Date(); return now.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
