@@ -1,10 +1,11 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.1.0
+ * @version 2.1.1
  *
- * Perubahan Utama (v2.1.0):
- * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang. Ini memperbaiki bug di mana data untuk "Surveys" dan seterusnya tidak ditampilkan.
+ * Perubahan Utama (v2.1.1):
+ * - PERBAIKAN BUG: Memperbaiki typo di fungsi `updateAllSummaries` (dataMappin -> dataMapping) yang mencegah tabel ringkasan dirender.
+ * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang.
  * - KONFIGURASI TERPUSAT: Semua target, nama sheet, dan pemetaan data ada di satu objek `CONFIG`.
  * - FORM HANDLER TUNGGAL: Satu fungsi `handleFormSubmit` untuk menangani semua form.
  * - PERHITUNGAN DINAMIS: Logika kalkulasi KPI tidak lagi menggunakan `switch-case` statis.
@@ -20,7 +21,8 @@ const currentUser = JSON.parse(currentUserJSON);
 // =================================================================================
 // KONFIGURASI TERPUSAT
 // =================================================================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwQ4U8l7V2r1sH7FqTqG9x-8YjZk5rJ3vD6nC4mB3sA/exec"; // <-- PASTIKAN INI URL DEPLOYMENT TERBARU ANDA
+// ▼▼▼ PASTIKAN ANDA MENGGANTI URL INI DENGAN URL DEPLOYMENT TERBARU ANDA ▼▼▼
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec"; // <-- GANTI DENGAN URL BARU ANDA
 
 const CONFIG = {
     // Definisikan semua target di sini
@@ -53,7 +55,6 @@ const CONFIG = {
         'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td>` },
         'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td>` },
         'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td>` },
-        // --- PENAMBAHAN: Mapping untuk semua sheet yang tersisa ---
         'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td>` },
         'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>` },
         'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td>` },
@@ -169,7 +170,6 @@ function handleFormSubmit(e) {
         return;
     }
     
-    // Validasi batas waktu untuk target harian
     const isDaily = CONFIG.targets.daily.some(t => CONFIG.dataMapping[sheetName]?.dataKey === t.dataKey);
     if (isDaily && !isWithinCutoffTime()) {
         showMessage('Batas waktu input harian (16:00) terlewati!', 'error');
@@ -179,7 +179,6 @@ function handleFormSubmit(e) {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
 
-    // Tambahkan data umum
     data.id = Date.now();
     data.sales = currentUser.name;
     data.timestamp = getLocalTimestampString();
@@ -208,9 +207,6 @@ function getFilteredData(dataType) {
     return currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name);
 }
 
-/**
- * Menghitung pencapaian untuk satu target spesifik secara dinamis.
- */
 function calculateAchievementForTarget(target) {
     if (!target.dataKey || !target.dateField) return 0;
 
@@ -221,7 +217,7 @@ function calculateAchievementForTarget(target) {
 
     return data.filter(d => {
         const itemDate = new Date(d[target.dateField]);
-        if (isNaN(itemDate.getTime())) return false; // Abaikan data dengan tanggal tidak valid
+        if (isNaN(itemDate.getTime())) return false;
 
         if (CONFIG.targets.daily.some(t => t.id === target.id)) {
             return itemDate.toDateString() === today.toDateString();
@@ -291,14 +287,10 @@ function updateProgressBar(type, achieved, total) {
     document.getElementById(`${type}Total`).textContent = total;
 }
 
-/**
- * Membuat tabel ringkasan secara dinamis.
- */
 function updateSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) {
-        // Ini bukan error, mungkin halaman tidak memiliki tabel ringkasan untuk data ini
         return;
     }
     
@@ -322,8 +314,9 @@ function updateSummaryTable(sheetName, mapping) {
 }
 
 function updateAllSummaries() {
+    // PERBAIKAN TYPO: dataMappin -> dataMapping
     for (const sheetName in CONFIG.dataMapping) {
-        updateSummaryTable(sheetName, CONFIG.dataMappin[sheetName]);
+        updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName]);
     }
 }
 
@@ -397,12 +390,10 @@ function showMessage(message, type = 'info') {
 }
 
 function setupEventListeners() {
-    // Event listener untuk semua form KPI
     document.querySelectorAll('form.kpi-form').forEach(form => {
         form.addEventListener('submit', handleFormSubmit);
     });
 
-    // Event listener untuk navigasi
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
@@ -410,7 +401,6 @@ function setupEventListeners() {
         });
     });
 
-    // Event listener untuk logout
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
 }
 
@@ -418,7 +408,6 @@ function initializeApp() {
     if (!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
     
-    // Inisialisasi semua target sebagai aktif secara default
     const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
     allTargets.forEach(target => {
         currentData.settings[target.id] = true;
