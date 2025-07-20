@@ -1,10 +1,11 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.1.1
+ * @version 2.2.0
  *
- * Perubahan Utama (v2.1.1):
- * - PERBAIKAN BUG: Memperbaiki typo di fungsi `updateAllSummaries` (dataMappin -> dataMapping) yang mencegah tabel ringkasan dirender.
+ * Perubahan Utama (v2.2.0):
+ * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk beberapa target (seperti Launch Campaign) menjadi 'timestamp' agar perhitungan KPI didasarkan pada waktu input, bukan tanggal acara/kampanye.
+ * - PERBAIKAN BUG: Memperbaiki typo di fungsi `updateAllSummaries` (dataMappin -> dataMapping).
  * - PERBAIKAN BUG: Melengkapi objek `CONFIG.dataMapping` dengan semua definisi tabel yang hilang.
  * - KONFIGURASI TERPUSAT: Semua target, nama sheet, dan pemetaan data ada di satu objek `CONFIG`.
  * - FORM HANDLER TUNGGAL: Satu fungsi `handleFormSubmit` untuk menangani semua form.
@@ -28,24 +29,24 @@ const CONFIG = {
     // Definisikan semua target di sini
     targets: {
         daily: [
-            { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'date' },
-            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', dateField: 'date' },
-            { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', dateField: 'date' }
+            { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'timestamp' },
+            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', dateField: 'timestamp' },
+            { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', dateField: 'timestamp' }
         ],
         weekly: [
-            { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing', dateField: 'date' },
-            { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor', dateField: 'visitDate' },
-            { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations', dateField: 'date' },
-            { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys', dateField: 'surveyDate' },
+            { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing', dateField: 'timestamp' },
+            { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor', dateField: 'timestamp' },
+            { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations', dateField: 'timestamp' },
+            { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys', dateField: 'timestamp' },
             { id: 8, name: "Laporan Ringkas Mingguan", target: 1, penalty: 50000, dataKey: 'reports', dateField: 'timestamp' },
             { id: 9, name: "Input CRM Survey kompetitor", target: 1, penalty: 25000, dataKey: 'crmSurveys', dateField: 'timestamp' },
-            { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', dateField: 'eventDate' }
+            { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', dateField: 'timestamp' }
         ],
         monthly: [
-            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'date' },
-            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'date' },
-            { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'eventDate' },
-            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'campaignStartDate' }
+            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'timestamp' },
+            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'timestamp' },
+            { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'timestamp' },
+            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' } // <-- PERUBAHAN LOGIKA DI SINI
         ]
     },
     // Pemetaan nama sheet ke kunci data dan konfigurasi tabel ringkasan
