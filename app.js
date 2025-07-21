@@ -1,13 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.3.0
+ * @version 3.4.0
  *
- * Perubahan Utama (v3.3.0):
- * - FITUR: Tombol "Update" pada data lead sekarang akan selalu muncul selama statusnya bukan 'Lost'.
- * - FITUR: Opsi pada modal update status sekarang dinamis, menampilkan alur status yang logis (e.g., dari Prospect hanya bisa ke Deal atau Lost).
+ * Perubahan Utama (v3.4.0):
+ * - BUG FIX: Tabel rekap "Semua Data Leads" sekarang merespons filter periode.
+ * - BUG FIX: Memperbaiki format baris tabel (rowGenerator) untuk semua rekap data (Canvasing, Campaign, dll.) agar tidak merusak layout tabel.
  *
  * Perubahan Sebelumnya:
+ * - FITUR: Tombol "Update" pada data lead sekarang akan selalu muncul selama statusnya bukan 'Lost'.
+ * - FITUR: Opsi pada modal update status sekarang dinamis.
  * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
  */
 
@@ -51,16 +53,17 @@ const CONFIG = {
         'Prospects': { dataKey: 'prospects' },
         'B2BBookings': { dataKey: 'b2bBookings' },
         'VenueBookings': { dataKey: 'venueBookings' },
-        'Canvasing': { dataKey: 'canvasing', headers: ['Waktu', 'Judul Meeting', 'File'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>` },
-        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td>` },
-        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td>` },
-        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td>` },
-        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td>` },
-        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName}</a>` : 'N/A'}</td>` },
-        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td>` },
-        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td>` },
-        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td>` },
-        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: item => `<td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td>` },
+        // PERBAIKAN: Menambahkan <tr> di semua rowGenerator
+        'Canvasing': { dataKey: 'canvasing', headers: ['Waktu', 'Judul Meeting', 'File'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>` },
+        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>` },
+        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>` },
+        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>` },
+        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>` },
+        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>` },
+        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td></tr>` },
+        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>` },
+        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>` },
+        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>` },
     }
 };
 
@@ -309,22 +312,20 @@ function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) 
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    const dataToDisplay = sheetName === 'Leads'
-        ? getFilteredData(mapping.dataKey)
-        : getFilteredData(mapping.dataKey, periodStartDate, periodEndDate);
+    // PERBAIKAN: Hapus kondisi khusus untuk 'Leads', sehingga semua tabel difilter.
+    const dataToDisplay = getFilteredData(mapping.dataKey, periodStartDate, periodEndDate);
 
     if (dataToDisplay.length === 0) {
-        container.innerHTML = `<div class="empty-state">Belum ada data</div>`;
+        container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
     }
 
-    let tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.reverse().map(item => mapping.rowGenerator(item)).join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => mapping.rowGenerator(item)).join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
 function generateLeadRow(item) {
     const statusClass = item.status ? item.status.toLowerCase().replace(/\s+/g, '-') : 'lead';
-    // PERUBAHAN: Tampilkan tombol update selama status bukan 'Lost'
     const updateButton = (item.status || 'Lead') !== 'Lost'
         ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}')">Update</button>`
         : '-';
@@ -342,12 +343,15 @@ function openUpdateModal(leadId) {
     document.getElementById('updateLeadId').value = lead.id;
     document.getElementById('modalCustomerName').textContent = lead.customerName;
 
-    // PERUBAHAN: Sesuaikan opsi status berdasarkan status saat ini
     const statusSelect = document.getElementById('updateStatus');
-    statusSelect.innerHTML = ''; // Kosongkan opsi sebelumnya
+    statusSelect.innerHTML = ''; 
 
     const currentStatus = lead.status || 'Lead';
     document.getElementById('modalCurrentStatus').textContent = currentStatus;
+    // Menyesuaikan class untuk styling status
+    const statusElement = document.getElementById('modalCurrentStatus');
+    statusElement.className = `status status--${currentStatus.toLowerCase().replace(/\s+/g, '-')}`;
+    statusElement.style.paddingLeft = '0'; // Override style jika perlu
 
     if (currentStatus === 'Lead') {
         statusSelect.innerHTML = `
