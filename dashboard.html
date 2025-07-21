@@ -29,6 +29,20 @@
                         <li><a href="#" data-page="dashboard" class="nav-link active">Dashboard</a></li>
                     </ul>
                 </div>
+
+                <!-- <<< PERUBAHAN: Filter dipindahkan ke sini >>> -->
+                <div class="nav-section">
+                    <h3>Filter Periode</h3>
+                    <div class="form-group" style="padding: 0 var(--space-12);">
+                        <label for="yearFilter" class="form-label">Tahun</label>
+                        <select id="yearFilter" class="form-control" style="width: 100%;"></select>
+                    </div>
+                    <div class="form-group" style="padding: 0 var(--space-12);">
+                        <label for="periodFilter" class="form-label">Periode</label>
+                        <select id="periodFilter" class="form-control" style="width: 100%;"></select>
+                    </div>
+                </div>
+
                 <div class="nav-section sales-only">
                     <h3>Input KPI</h3>
                     <ul class="nav-list">
@@ -58,13 +72,9 @@
         <main class="main-content">
             <!-- Dashboard Page -->
             <div id="dashboard" class="content-page active">
+                <!-- <<< PERUBAHAN: Filter dihapus dari sini >>> -->
                 <div class="page-header">
                     <h2>Dashboard KPI</h2>
-                    <!-- <<< PERUBAHAN: Menambahkan filter tahun dan periode >>> -->
-                    <div class="date-filter">
-                        <select id="yearFilter" class="form-control" style="width: 120px;"></select>
-                        <select id="periodFilter" class="form-control" style="width: 200px;"></select>
-                    </div>
                 </div>
                 <div class="kpi-grid">
                     <div class="card kpi-card"><div class="card__body"><h3>Target Harian</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="dailyProgress"></div></div><span id="dailyPercentage">0%</span></div><div class="kpi-details"><span id="dailyAchieved">0</span> / <span id="dailyTotal">0</span></div></div></div>
