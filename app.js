@@ -1,11 +1,14 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.2.0
+ * @version 3.3.0
  *
- * Perubahan Utama (v3.2.0):
+ * Perubahan Utama (v3.3.0):
+ * - FITUR: Tombol "Update" pada data lead sekarang akan selalu muncul selama statusnya bukan 'Lost'.
+ * - FITUR: Opsi pada modal update status sekarang dinamis, menampilkan alur status yang logis (e.g., dari Prospect hanya bisa ke Deal atau Lost).
+ *
+ * Perubahan Sebelumnya:
  * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
- * - CLEANUP: Menghapus kode yang berulang dan menyederhanakan inisialisasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -112,7 +115,6 @@ async function loadInitialData() {
         const response = await fetch(`${SCRIPT_URL}?action=getAllData&includeUsers=true`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            // Inisialisasi semua kunci data yang mungkin ada
             const allKeys = new Set(Object.keys(currentData));
             Object.values(CONFIG.dataMapping).forEach(map => allKeys.add(map.dataKey));
             allKeys.add('timeOff');
@@ -296,7 +298,7 @@ function updateProgressBar(type, achieved, total) {
 
 function updateAllSummaries(periodStartDate, periodEndDate) {
     for (const sheetName in CONFIG.dataMapping) {
-        if (CONFIG.dataMapping[sheetName].headers) { // Hanya update yang punya tabel
+        if (CONFIG.dataMapping[sheetName].headers) {
             updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName], periodStartDate, periodEndDate);
         }
     }
@@ -322,7 +324,11 @@ function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) 
 
 function generateLeadRow(item) {
     const statusClass = item.status ? item.status.toLowerCase().replace(/\s+/g, '-') : 'lead';
-    return `<tr><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'Lead'}</span></td><td>${item.status === 'Lead' ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}')">Update</button>` : '-'}</td></tr>`;
+    // PERUBAHAN: Tampilkan tombol update selama status bukan 'Lost'
+    const updateButton = (item.status || 'Lead') !== 'Lost'
+        ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}')">Update</button>`
+        : '-';
+    return `<tr><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'Lead'}</span></td><td>${updateButton}</td></tr>`;
 }
 
 // =================================================================================
@@ -332,8 +338,34 @@ function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const lead = currentData.leads.find(l => l.id === leadId);
     if (!lead || !modal) return;
+
     document.getElementById('updateLeadId').value = lead.id;
     document.getElementById('modalCustomerName').textContent = lead.customerName;
+
+    // PERUBAHAN: Sesuaikan opsi status berdasarkan status saat ini
+    const statusSelect = document.getElementById('updateStatus');
+    statusSelect.innerHTML = ''; // Kosongkan opsi sebelumnya
+
+    const currentStatus = lead.status || 'Lead';
+    document.getElementById('modalCurrentStatus').textContent = currentStatus;
+
+    if (currentStatus === 'Lead') {
+        statusSelect.innerHTML = `
+            <option value="Prospect">Prospect</option>
+            <option value="Deal">Deal</option>
+            <option value="Lost">Lost</option>
+        `;
+    } else if (currentStatus === 'Prospect') {
+        statusSelect.innerHTML = `
+            <option value="Deal">Deal</option>
+            <option value="Lost">Lost</option>
+        `;
+    } else if (currentStatus === 'Deal') {
+        statusSelect.innerHTML = `
+            <option value="Lost">Lost</option>
+        `;
+    }
+
     modal.classList.add('active');
 }
 
@@ -349,7 +381,7 @@ function closeModal() {
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) return true; // Hari Minggu libur
+    if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
     return (currentData.timeOff || []).some(off => 
         off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
@@ -379,7 +411,6 @@ function initializeApp() {
     setInterval(updateDateTime, 60000);
     
     setupEventListeners();
-    // Gunakan setupFilters dari utils.js dan berikan updateAllUI sebagai callback
     setupFilters(updateAllUI); 
     
     loadInitialData();
