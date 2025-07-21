@@ -1,10 +1,10 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.3.0
+ * @version 2.4.0
  *
- * Perubahan Utama (v2.3.0):
- * - PENINGKATAN LEADERBOARD: Papan Peringkat Sales sekarang menampilkan lebih banyak kolom rincian aktivitas (DoorToDoor, Quotations) untuk memberikan gambaran yang lebih komprehensif.
+ * Perubahan Utama (v2.4.0):
+ * - PENINGKATAN LEADERBOARD: Papan Peringkat Sales sekarang menampilkan rincian untuk SEMUA kategori aktivitas yang dilacak, memberikan gambaran paling lengkap.
  *
  * Perubahan Sebelumnya:
  * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci menampilkan ✓ atau ✗ untuk semua jenis target.
@@ -158,34 +158,48 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
 
     leaderboardData.sort((a, b) => b.total - a.total);
     
-    // <<< PERUBAHAN: Tambahkan header kolom baru di sini
+    // <<< PERUBAHAN: Menambahkan semua kolom aktivitas ke tabel
     container.innerHTML = `
-        <table>
-            <thead>
-                <tr>
-                    <th>Nama Sales</th>
-                    <th>Leads</th>
-                    <th>Canvasing</th>
-                    <th>Promosi</th>
-                    <th>DoorToDoor</th>
-                    <th>Quotations</th>
-                    <th>Total Aktivitas</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${leaderboardData.map(s => `
+        <div class="performance-table-wrapper">
+            <table class="performance-table" style="table-layout: auto;">
+                <thead>
                     <tr>
-                        <td>${s.name}</td>
-                        <td>${s.leads || 0}</td>
-                        <td>${s.canvasing || 0}</td>
-                        <td>${s.promosi || 0}</td>
-                        <td>${s.doorToDoor || 0}</td>
-                        <td>${s.quotations || 0}</td>
-                        <td><strong>${s.total}</strong></td>
+                        <th>Nama Sales</th>
+                        <th>Leads</th>
+                        <th>Canvasing</th>
+                        <th>Promosi</th>
+                        <th>D2D</th>
+                        <th>Quotes</th>
+                        <th>Surveys</th>
+                        <th>Reports</th>
+                        <th>CRM Kompetitor</th>
+                        <th>Event Barter</th>
+                        <th>Events</th>
+                        <th>Campaigns</th>
+                        <th>Total</th>
                     </tr>
-                `).join('')}
-            </tbody>
-        </table>`;
+                </thead>
+                <tbody>
+                    ${leaderboardData.map(s => `
+                        <tr>
+                            <td>${s.name}</td>
+                            <td>${s.leads || 0}</td>
+                            <td>${s.canvasing || 0}</td>
+                            <td>${s.promosi || 0}</td>
+                            <td>${s.doorToDoor || 0}</td>
+                            <td>${s.quotations || 0}</td>
+                            <td>${s.surveys || 0}</td>
+                            <td>${s.reports || 0}</td>
+                            <td>${s.crmSurveys || 0}</td>
+                            <td>${s.conversions || 0}</td>
+                            <td>${s.events || 0}</td>
+                            <td>${s.campaigns || 0}</td>
+                            <td><strong>${s.total}</strong></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>`;
 }
 
 // =================================================================================
