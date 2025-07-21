@@ -54,7 +54,7 @@ const CONFIG = {
             rowGenerator: generateLeadRow,
             detailLabels: {
                 timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
-                product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', // PERUBAHAN: Menambahkan label untuk bukti lead
+                product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead',
                 notes: 'Catatan Awal', status: 'Status',
                 statusLog: 'Log Status'
             }
@@ -109,7 +109,7 @@ const CONFIG = {
             dataKey: 'conversions', 
             headers: ['Waktu', 'Event', 'Client', 'Tanggal'], 
             rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan' } 
+            detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian' } 
         },
         'Events': { 
             dataKey: 'events', 
@@ -198,8 +198,6 @@ async function loadInitialData() {
 // =================================================================================
 // FORM HANDLING
 // =================================================================================
-
-// PERUBAHAN: Menambahkan fungsi helper untuk konversi file ke Base64
 function toBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -209,7 +207,6 @@ function toBase64(file) {
     });
 }
 
-// PERUBAHAN: Memperbarui handleFormSubmit untuk memproses file
 async function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -218,20 +215,26 @@ async function handleFormSubmit(e) {
 
     const formData = new FormData(form);
     const data = {};
+    // Loop through form entries to separate files from other data
     for (const [key, value] of formData.entries()) {
-        if (typeof value !== 'object' || value === null) { 
-            data[key] = value;
+        if (value instanceof File && value.size > 0) {
+            // If it's a file, we'll process it later
+            continue;
         }
+        data[key] = value;
     }
 
-    const fileInput = form.querySelector('input[type="file"]');
-    if (fileInput && fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        data[fileInput.name] = {
-            fileName: file.name,
-            mimeType: file.type,
-            data: await toBase64(file)
-        };
+    // Process all file inputs in the form
+    const fileInputs = form.querySelectorAll('input[type="file"]');
+    for (const fileInput of fileInputs) {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            data[fileInput.name] = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        }
     }
 
     data.id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -494,8 +497,8 @@ function openDetailModal(dataKey, itemId) {
                 value = formatDate(value);
             } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
                 value = formatCurrency(value);
-            } else if (typeof value === 'object' && value.hasOwnProperty('fileName')) { // Handle file object
-                 dd.innerHTML = `<a href="${value.fileUrl}" target="_blank" rel="noopener noreferrer">${value.fileName}</a>`;
+            } else if (typeof value === 'object' && value.hasOwnProperty('fileUrl')) { 
+                 dd.innerHTML = `<a href="${value.fileUrl}" target="_blank" rel="noopener noreferrer">${value.fileName || 'Lihat File'}</a>`;
                 detailList.appendChild(dt);
                 detailList.appendChild(dd);
                 continue;
