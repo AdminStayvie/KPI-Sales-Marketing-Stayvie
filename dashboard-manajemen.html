@@ -14,13 +14,9 @@
         .stat-card h3 { font-size: var(--font-size-md); color: var(--color-text-secondary); margin-bottom: var(--space-8); }
         .stat-card .value { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary); }
         .dashboard-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-24); }
-        .chart-container { position: relative; height: 350px; width: 100%; }
-        .chart-wrapper { margin-bottom: var(--space-24); }
-        .section-divider { border: none; border-top: 1px solid var(--color-border); margin: var(--space-32) 0; }
-        .individual-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-32); margin-top: var(--space-16); }
-        .individual-chart-container { text-align: center; }
-        .individual-chart-container h5 { margin-bottom: var(--space-12); font-size: var(--font-size-lg); color: var(--color-text); }
         
+        /* <<< CSS DIHAPUS: CSS untuk grafik yang tidak lagi digunakan >>> */
+
         /* <<< CSS BARU UNTUK LAPORAN KINERJA INTERAKTIF >>> */
         .performance-report-container .filters { display: flex; gap: var(--space-16); margin-bottom: var(--space-16); align-items: center; }
         .tabs-container { display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-16); }
@@ -61,9 +57,10 @@
 
             <div class="dashboard-layout">
                 <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
-                <div class="card"><div class="card__header"><h3>Visualisasi Kinerja Tim</h3></div><div class="card__body"><div class="chart-wrapper"><h4>Total Aktivitas per Kategori</h4><div class="chart-container" style="height: 300px;"><canvas id="categoryComparisonChart"></canvas></div></div><hr class="section-divider"><h4>Rincian Aktivitas per Sales</h4><div id="individualSalesCharts" class="individual-charts-grid"></div></div></div>
                 
-                <!-- <<< HALAMAN BARU: Laporan Kinerja Rinci >>> -->
+                <!-- <<< BAGIAN DIHAPUS: Visualisasi Kinerja Tim (Grafik) >>> -->
+
+                <!-- Laporan Kinerja Rinci per Sales -->
                 <div class="card">
                     <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
                     <div class="card__body">
