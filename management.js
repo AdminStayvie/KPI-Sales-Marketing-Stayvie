@@ -1,14 +1,15 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.7.0
+ * @version 2.8.0
  *
- * Perubahan Utama (v2.7.0):
- * - FITUR BARU: Hari Minggu sekarang secara otomatis dianggap sebagai hari libur dan target harian tidak berlaku (diblok) di Laporan Kinerja Rinci.
+ * Perubahan Utama (v2.8.0):
+ * - RESTRUKTURISASI UI: Memisahkan "Pengaturan Hari Libur & Izin" ke halaman/tab sendiri yang dapat diakses melalui sidebar navigasi.
+ * - NAVIGASI: Menambahkan fungsi `showContentPage` untuk menangani perpindahan antar halaman.
  *
  * Perubahan Sebelumnya:
- * - PERBAIKAN BUG ZONA WAKTU: Memperbaiki fungsi `isDayOff` agar konsisten membandingkan tanggal dalam format lokal.
- * - FITUR BARU: Menambahkan tab "Pengaturan Hari Libur & Izin".
+ * - FITUR BARU: Hari Minggu secara otomatis dianggap sebagai hari libur.
+ * - PERBAIKAN BUG ZONA WAKTU: Memperbaiki fungsi `isDayOff`.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -266,14 +267,10 @@ function getDatesForPeriod() {
     return dates;
 }
 
-// <<< PERBAIKAN: Fungsi ini sekarang juga mengecek hari Minggu
 function isDayOff(date, salesName) {
-    // Cek jika hari adalah Minggu (getDay() === 0)
     if (date.getDay() === 0) {
         return true;
     }
-    
-    // Cek jika terdaftar sebagai libur/izin
     const dateString = toLocalDateString(date);
     return (allData.timeOff || []).some(off => 
         off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
@@ -448,6 +445,14 @@ function renderTimeOffList() {
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
 
+// <<< BARU: Fungsi untuk navigasi antar halaman
+function showContentPage(pageId) {
+    document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
+    document.getElementById(pageId)?.classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+    document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
+}
+
 function toLocalDateString(date) {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -467,6 +472,15 @@ function initializeApp() {
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     updateDateTime();
     setInterval(updateDateTime, 60000);
+    
+    // <<< BARU: Setup event listener untuk navigasi sidebar
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            showContentPage(link.dataset.page);
+        });
+    });
+
     loadInitialData(true); 
     setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
 }
