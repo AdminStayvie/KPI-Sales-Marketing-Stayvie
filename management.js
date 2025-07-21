@@ -1,15 +1,19 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.7.0
+ * @version 1.8.0
  *
- * Perubahan Utama (v1.7.0):
- * - FITUR BARU: Menambahkan "Ringkasan Ketercapaian Target Sales". Fitur ini menampilkan progress bar untuk setiap target (harian, mingguan, bulanan) bagi masing-masing sales.
- * - PENAMBAHAN KONFIGURASI: Menduplikasi `TARGET_CONFIG` dari `app.js` untuk memungkinkan perhitungan pencapaian target di halaman manajemen.
+ * Perubahan Utama (v1.8.0):
+ * - FITUR UTAMA: Merombak total "Ringkasan Ketercapaian Target" menjadi "Laporan Kinerja Rinci".
+ * - Tampilan per Tab: Setiap sales memiliki tab sendiri.
+ * - Filter Periode: Menambahkan filter tahun dan periode bulan (misal: Jun-Jul).
+ * - Tampilan Kalender: Menampilkan tabel dengan tanggal sebagai kolom dan target sebagai baris.
+ * - Indikator Kinerja: Menampilkan (✓/✗) untuk target harian dan (progres/target) untuk mingguan/bulanan.
+ * - PENGAMBILAN DATA: Logika sekarang siap menerima daftar semua pengguna dari server untuk memastikan semua sales (termasuk yang belum aktif) bisa ditampilkan.
  *
  * Perubahan Sebelumnya:
- * - RESTRUKTURISASI VISUAL: Mengganti satu grafik dengan beberapa visualisasi yang lebih fokus.
- * - PERBAIKAN BUG: Logika "Total Aktivitas" dan "Sales Terbaik" menghitung semua kategori.
+ * - Menambahkan "Ringkasan Ketercapaian Target Sales" dengan progress bar.
+ * - RESTRUKTURISASI VISUAL: Memisahkan grafik menjadi beberapa visualisasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -34,8 +38,6 @@ const TRACKED_ACTIVITY_KEYS = [
     'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'
 ];
 
-// <<< BARU: Duplikasi konfigurasi target dari app.js >>>
-// NOTE: Idealnya ini ada di file konfigurasi bersama.
 const TARGET_CONFIG = {
     daily: [
         { id: 1, name: "Menginput Data Lead", target: 20, dataKey: 'leads', dateField: 'timestamp' },
@@ -56,19 +58,14 @@ const TARGET_CONFIG = {
     ]
 };
 
-
-const CHART_COLORS = [
-    'rgba(50, 184, 198, 0.7)', 'rgba(94, 82, 64, 0.7)', 'rgba(230, 129, 97, 0.7)',
-    'rgba(255, 205, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)',
-    'rgba(255, 159, 64, 0.7)', 'rgba(201, 203, 207, 0.7)', 'rgba(54, 162, 235, 0.7)',
-    'rgba(255, 99, 132, 0.7)', 'rgba(12, 65, 99, 0.7)'
-];
+const CHART_COLORS = ['rgba(50, 184, 198, 0.7)', 'rgba(94, 82, 64, 0.7)', 'rgba(230, 129, 97, 0.7)', 'rgba(255, 205, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)', 'rgba(201, 203, 207, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(12, 65, 99, 0.7)'];
 
 let allData = {};
 let previousAllData = {};
-let salesList = [];
+let allSalesUsers = []; // <<< Daftar semua user sales dari server
 let chartInstances = {};
 let isFetching = false;
+let selectedYear, selectedPeriod;
 
 // =================================================================================
 // FUNGSI UTAMA
@@ -77,11 +74,10 @@ let isFetching = false;
 async function loadInitialData(isInitialLoad = false) {
     if (isFetching) return;
     isFetching = true;
-
     if (isInitialLoad) showMessage("Memuat data tim dari server...", "info");
     
     try {
-        const fetchUrl = `${SCRIPT_URL}?action=getAllData&t=${new Date().getTime()}`;
+        const fetchUrl = `${SCRIPT_URL}?action=getAllData&includeUsers=true&t=${new Date().getTime()}`; // Minta data user
         const response = await fetch(fetchUrl, { mode: 'cors' });
         const result = await response.json();
 
@@ -90,21 +86,24 @@ async function loadInitialData(isInitialLoad = false) {
             if (JSON.stringify(allData) !== JSON.stringify(previousAllData)) {
                 previousAllData = JSON.parse(JSON.stringify(allData));
                 
-                const allSalesNames = new Set();
-                TRACKED_ACTIVITY_KEYS.forEach(key => {
-                    (allData[key] || []).forEach(item => item.sales && allSalesNames.add(item.sales));
-                });
-                salesList = Array.from(allSalesNames);
+                // <<< Gunakan daftar user dari server, fallback ke data aktivitas
+                if (allData.users && allData.users.length > 0) {
+                    allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
+                } else {
+                    const salesFromActivities = new Set();
+                    TRACKED_ACTIVITY_KEYS.forEach(key => (allData[key] || []).forEach(item => item.sales && salesFromActivities.add(item.sales)));
+                    allSalesUsers = Array.from(salesFromActivities);
+                }
                 
+                if (isInitialLoad) setupFilters();
                 updateAllUI();
                 if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
             } else if (isInitialLoad) {
+                if (isInitialLoad) setupFilters();
                 updateAllUI();
                 showMessage("Data berhasil dimuat.", "success");
             }
-        } else {
-            if (isInitialLoad) throw new Error(result.message);
-        }
+        } else if (isInitialLoad) throw new Error(result.message);
     } catch (error) {
         if (isInitialLoad) showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     } finally {
@@ -116,16 +115,15 @@ function updateAllUI() {
     updateStatCards();
     updateLeaderboard();
     renderVisualizations();
-    renderTargetAchievementSummary(); // <<< BARU: Panggil fungsi ringkasan target
+    renderTabbedTargetSummary(); // <<< Panggil fungsi laporan baru
 }
 
 // =================================================================================
-// FUNGSI UPDATE UI
+// FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
 // =================================================================================
 
 function updateStatCards() {
-    const monthStart = getMonthStart();
-    
+    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
     const leadsThisMonth = (allData.leads || []).filter(d => new Date(d.timestamp) >= monthStart);
     const canvasingThisMonth = (allData.canvasing || []).filter(d => new Date(d.timestamp) >= monthStart);
     
@@ -133,7 +131,7 @@ function updateStatCards() {
     document.getElementById('totalCanvasing').textContent = canvasingThisMonth.length;
 
     const salesPerformance = {};
-    salesList.forEach(salesName => {
+    allSalesUsers.forEach(salesName => {
         salesPerformance[salesName] = TRACKED_ACTIVITY_KEYS.reduce((total, key) => 
             total + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
     });
@@ -146,220 +144,183 @@ function updateStatCards() {
 function updateLeaderboard() {
     const container = document.getElementById('leaderboard');
     if (!container) return;
-    const monthStart = getMonthStart();
+    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
 
-    const leaderboardData = salesList.map(salesName => {
+    const leaderboardData = allSalesUsers.map(salesName => {
         const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
         const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => 
-            acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
+        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
         return { name: salesName, leads, canvasing, promosi, total };
     });
 
     leaderboardData.sort((a, b) => b.total - a.total);
-
-    container.innerHTML = `
-        <table>
-            <thead><tr><th>Nama Sales</th><th>Leads</th><th>Canvasing</th><th>Promosi</th><th>Total Aktivitas</th></tr></thead>
-            <tbody>${leaderboardData.map(s => `<tr><td>${s.name}</td><td>${s.leads}</td><td>${s.canvasing}</td><td>${s.promosi}</td><td><strong>${s.total}</strong></td></tr>`).join('')}</tbody>
-        </table>`;
+    container.innerHTML = `<table><thead><tr><th>Nama Sales</th><th>Leads</th><th>Canvasing</th><th>Promosi</th><th>Total Aktivitas</th></tr></thead><tbody>${leaderboardData.map(s => `<tr><td>${s.name}</td><td>${s.leads}</td><td>${s.canvasing}</td><td>${s.promosi}</td><td><strong>${s.total}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 
 // =================================================================================
-// FUNGSI VISUALISASI
+// FUNGSI VISUALISASI (GRAFIK)
 // =================================================================================
 
-function destroyAllCharts() {
-    for (const chartId in chartInstances) {
-        if (chartInstances[chartId]) chartInstances[chartId].destroy();
-    }
-    chartInstances = {};
-}
-
-function renderVisualizations() {
-    destroyAllCharts();
-    renderCategoryComparisonChart();
-    renderIndividualSalesCharts();
-}
+function destroyAllCharts() { Object.values(chartInstances).forEach(chart => chart.destroy()); chartInstances = {}; }
+function renderVisualizations() { destroyAllCharts(); renderCategoryComparisonChart(); renderIndividualSalesCharts(); }
 
 function renderCategoryComparisonChart() {
     const ctx = document.getElementById('categoryComparisonChart')?.getContext('2d');
     if (!ctx) return;
-    const monthStart = getMonthStart();
-
-    const data = TRACKED_ACTIVITY_KEYS.map(key => 
-        (allData[key] || []).filter(d => new Date(d.timestamp) >= monthStart).length
-    );
-
-    chartInstances.categoryComparison = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)),
-            datasets: [{ label: 'Total Input', data: data, backgroundColor: CHART_COLORS }]
-        },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-    });
+    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
+    const data = TRACKED_ACTIVITY_KEYS.map(key => (allData[key] || []).filter(d => new Date(d.timestamp) >= monthStart).length);
+    chartInstances.categoryComparison = new Chart(ctx, { type: 'bar', data: { labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)), datasets: [{ label: 'Total Input', data: data, backgroundColor: CHART_COLORS }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
 }
 
 function renderIndividualSalesCharts() {
     const container = document.getElementById('individualSalesCharts');
     if (!container) return;
     container.innerHTML = '';
-    const monthStart = getMonthStart();
+    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
 
-    salesList.forEach(salesName => {
-        const chartData = [];
-        const chartLabels = [];
-
-        TRACKED_ACTIVITY_KEYS.forEach(key => {
-            const count = (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-            if (count > 0) {
-                chartData.push(count);
-                chartLabels.push(key.charAt(0).toUpperCase() + key.slice(1));
-            }
-        });
-
-        if (chartData.length > 0) {
+    allSalesUsers.forEach(salesName => {
+        const chartData = TRACKED_ACTIVITY_KEYS.map(key => (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length);
+        if (chartData.some(d => d > 0)) {
             const chartId = `salesChart_${salesName.replace(/\s+/g, '')}`;
-            const chartContainer = document.createElement('div');
-            chartContainer.className = 'individual-chart-container';
-            chartContainer.innerHTML = `<h5>${salesName}</h5><div class="chart-container" style="height: 300px;"><canvas id="${chartId}"></canvas></div>`;
-            container.appendChild(chartContainer);
-
+            container.innerHTML += `<div class="individual-chart-container"><h5>${salesName}</h5><div class="chart-container" style="height: 300px;"><canvas id="${chartId}"></canvas></div></div>`;
             const ctx = document.getElementById(chartId).getContext('2d');
-            chartInstances[chartId] = new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels: chartLabels, datasets: [{ data: chartData, backgroundColor: CHART_COLORS, borderColor: 'var(--color-surface)', borderWidth: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 10, boxWidth: 12 } } } }
-            });
+            chartInstances[chartId] = new Chart(ctx, { type: 'doughnut', data: { labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)), datasets: [{ data: chartData, backgroundColor: CHART_COLORS, borderColor: 'var(--color-surface)', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 10, boxWidth: 12 } } } } });
         }
     });
 }
 
 // =================================================================================
-// <<< FUNGSI BARU: RINGKASAN KETERCAPAIAN TARGET >>>
+// <<< FUNGSI BARU: LAPORAN KINERJA RINCI (TABEL KALENDER) >>>
 // =================================================================================
 
-/**
- * Helper function to calculate achievement for a specific sales and target.
- */
-function calculateAchievementForTarget(salesName, target) {
-    if (!target.dataKey || !target.dateField) return 0;
-
-    const data = (allData[target.dataKey] || []).filter(d => d.sales === salesName);
-    if (data.length === 0) return 0;
-
-    const today = new Date();
-    const weekStart = getWeekStart(today);
-    const monthStart = getMonthStart(today);
-
-    return data.filter(d => {
-        const itemDateStr = d[target.dateField];
-        if (!itemDateStr) return false;
-        const itemDate = new Date(itemDateStr);
-        if (isNaN(itemDate.getTime())) return false;
-
-        if (TARGET_CONFIG.daily.some(t => t.id === target.id)) {
-            return itemDate.toDateString() === today.toDateString();
-        }
-        if (TARGET_CONFIG.weekly.some(t => t.id === target.id)) {
-            return itemDate >= weekStart && itemDate <= today;
-        }
-        if (TARGET_CONFIG.monthly.some(t => t.id === target.id)) {
-            return itemDate >= monthStart && itemDate <= today;
-        }
-        return false;
-    }).length;
+function setupFilters() {
+    const yearFilter = document.getElementById('yearFilter');
+    const periodFilter = document.getElementById('periodFilter');
+    const currentYear = new Date().getFullYear();
+    for (let i = currentYear; i >= currentYear - 2; i--) {
+        yearFilter.innerHTML += `<option value="${i}">${i}</option>`;
+    }
+    selectedYear = yearFilter.value;
+    generatePeriodOptions();
+    
+    yearFilter.addEventListener('change', (e) => {
+        selectedYear = e.target.value;
+        generatePeriodOptions();
+        renderTabbedTargetSummary();
+    });
+    periodFilter.addEventListener('change', (e) => {
+        selectedPeriod = e.target.value;
+        renderTabbedTargetSummary();
+    });
 }
 
-/**
- * Merender ringkasan ketercapaian target untuk setiap sales.
- */
-function renderTargetAchievementSummary() {
-    const container = document.getElementById('targetAchievementSummary');
-    if (!container) return;
-    container.innerHTML = ''; // Kosongkan kontainer
+function generatePeriodOptions() {
+    const periodFilter = document.getElementById('periodFilter');
+    periodFilter.innerHTML = '';
+    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    for (let i = 0; i < 12; i++) {
+        const month1 = months[i];
+        const month2 = months[(i + 1) % 12];
+        const value = `${i}-${(i + 1) % 12}`;
+        periodFilter.innerHTML += `<option value="${value}">${month1} - ${month2}</option>`;
+    }
+    // Set default ke periode saat ini
+    const now = new Date();
+    const currentDay = now.getDate();
+    let currentMonthIndex = now.getMonth();
+    if (currentDay < 21) {
+        currentMonthIndex = (currentMonthIndex - 1 + 12) % 12;
+    }
+    const nextMonthIndex = (currentMonthIndex + 1) % 12;
+    selectedPeriod = `${currentMonthIndex}-${nextMonthIndex}`;
+    periodFilter.value = selectedPeriod;
+}
 
-    salesList.forEach(salesName => {
-        const salesCard = document.createElement('div');
-        salesCard.className = 'sales-target-card';
+function getDatesForPeriod() {
+    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
+    const startYear = selectedYear;
+    const endYear = startMonthIndex === 11 ? Number(selectedYear) + 1 : startYear;
+    
+    const startDate = new Date(startYear, startMonthIndex, 21);
+    const endDate = new Date(endYear, (startMonthIndex + 1) % 12, 20);
+    
+    const dates = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+        dates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return dates;
+}
 
-        let cardHTML = `<h5>${salesName}</h5>`;
+function renderTabbedTargetSummary() {
+    const tabsContainer = document.getElementById('tabsContainer');
+    const contentContainer = document.getElementById('tabContentContainer');
+    if (!tabsContainer || !contentContainer) return;
+
+    tabsContainer.innerHTML = '';
+    contentContainer.innerHTML = '';
+    const periodDates = getDatesForPeriod();
+
+    allSalesUsers.forEach((salesName, index) => {
+        const tabId = `tab-${salesName.replace(/\s+/g, '')}`;
+        const contentId = `content-${salesName.replace(/\s+/g, '')}`;
         
+        tabsContainer.innerHTML += `<button class="tab-button ${index === 0 ? 'active' : ''}" data-tab="${contentId}">${salesName}</button>`;
+        
+        let tableHeader = '<tr><th>Target</th>';
+        periodDates.forEach(date => { tableHeader += `<th>${date.getDate()}</th>`; });
+        tableHeader += '</tr>';
+
+        let tableBody = '';
         ['daily', 'weekly', 'monthly'].forEach(period => {
             TARGET_CONFIG[period].forEach(target => {
-                const achieved = calculateAchievementForTarget(salesName, target);
-                const percentage = target.target > 0 ? Math.min(100, Math.round((achieved / target.target) * 100)) : 0;
-                
-                cardHTML += `
-                    <div class="target-item">
-                        <span class="target-name">${target.name} (${period.charAt(0).toUpperCase()})</span>
-                        <div class="target-progress-details">
-                            <div class="progress-bar-container">
-                                <div class="progress-bar-fill" style="width: ${percentage}%;"></div>
-                            </div>
-                            <span class="progress-text">${achieved}/${target.target}</span>
-                        </div>
-                    </div>
-                `;
+                tableBody += `<tr><td>${target.name} (${period.charAt(0)})</td>`;
+                const dataForTarget = (allData[target.dataKey] || []).filter(d => d.sales === salesName);
+
+                periodDates.forEach(date => {
+                    let cellContent = '';
+                    if (period === 'daily') {
+                        const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                        cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
+                    } else if (period === 'weekly' && date.getDay() === 0) { // Minggu
+                        const weekStart = getWeekStart(date);
+                        const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
+                        cellContent = `<span class="progress-fraction">${achievedThisWeek}/${target.target}</span>`;
+                    } else if (period === 'monthly' && date.getDate() === 20) {
+                        const monthStart = getMonthStart(date);
+                        const achievedThisMonth = dataForTarget.filter(d => new Date(d.timestamp) >= monthStart).length;
+                        cellContent = `<span class="progress-fraction">${achievedThisMonth}/${target.target}</span>`;
+                    }
+                    tableBody += `<td>${cellContent}</td>`;
+                });
+                tableBody += '</tr>';
             });
         });
+        
+        contentContainer.innerHTML += `<div id="${contentId}" class="tab-content ${index === 0 ? 'active' : ''}"><div class="performance-table-wrapper"><table class="performance-table">${tableHeader}${tableBody}</table></div></div>`;
+    });
 
-        salesCard.innerHTML = cardHTML;
-        container.appendChild(salesCard);
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
     });
 }
-
 
 // =================================================================================
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
 
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-
-function getMonthStart(date = new Date()) {
-    const today = new Date(date);
-    const currentDay = today.getDate();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    const cutoffDay = 20;
-    let startDate;
-    if (currentDay > cutoffDay) {
-        startDate = new Date(currentYear, currentMonth, 21);
-    } else {
-        const previousMonth = new Date(currentYear, currentMonth, 1);
-        previousMonth.setMonth(previousMonth.getMonth() - 1);
-        startDate = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 21);
-    }
-    startDate.setHours(0, 0, 0, 0);
-    return startDate;
-}
-
-function showMessage(message, type = 'info') {
-    const existingMessage = document.querySelector('.message');
-    if(existingMessage) existingMessage.remove();
-    const notification = document.createElement('div');
-    notification.className = `message ${type}`;
-    notification.textContent = message;
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.insertBefore(notification, mainContent.firstChild);
-        setTimeout(() => { notification.remove(); }, 4000);
-    }
-}
-
-function updateDateTime() {
-    const dateTimeElement = document.getElementById('currentDateTime');
-    if (dateTimeElement) {
-        dateTimeElement.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
-    }
-}
-
-function logout() {
-    localStorage.removeItem('currentUser');
-    window.location.href = 'index.html';
-}
+function getMonthStart(date = new Date()) { const d = new Date(date); const day = d.getDate(); let m = d.getMonth(); let y = d.getFullYear(); if (day < 21) { m = (m - 1 + 12) % 12; if (m === 11) y--; } return new Date(y, m, 21); }
+function showMessage(message, type = 'info') { const el = document.querySelector('.message'); if(el) el.remove(); const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; document.querySelector('.main-content')?.insertBefore(n, document.querySelector('.main-content').firstChild); setTimeout(() => n.remove(), 4000); }
+function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
+function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
 
 function initializeApp() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
