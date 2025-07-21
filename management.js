@@ -1,17 +1,15 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.6.0
+ * @version 1.7.0
  *
- * Perubahan Utama (v1.6.0):
- * - RESTRUKTURISASI VISUAL: Mengganti satu grafik yang ramai dengan beberapa visualisasi yang lebih fokus.
- * 1. Grafik Batang Perbandingan Kategori: Membandingkan total input untuk setiap kategori di seluruh tim.
- * 2. Grafik Donat Individual: Menampilkan rincian aktivitas untuk setiap sales secara terpisah.
- * - PENINGKATAN KINERJA: Manajemen instance chart yang lebih baik untuk mencegah kebocoran memori.
+ * Perubahan Utama (v1.7.0):
+ * - FITUR BARU: Menambahkan "Ringkasan Ketercapaian Target Sales". Fitur ini menampilkan progress bar untuk setiap target (harian, mingguan, bulanan) bagi masing-masing sales.
+ * - PENAMBAHAN KONFIGURASI: Menduplikasi `TARGET_CONFIG` dari `app.js` untuk memungkinkan perhitungan pencapaian target di halaman manajemen.
  *
  * Perubahan Sebelumnya:
- * - PERBAIKAN BUG: Logika "Total Aktivitas" dan "Sales Terbaik" sekarang menghitung semua kategori data.
- * - PERBAIKAN BUG: Daftar sales dikumpulkan dari semua sumber data.
+ * - RESTRUKTURISASI VISUAL: Mengganti satu grafik dengan beberapa visualisasi yang lebih fokus.
+ * - PERBAIKAN BUG: Logika "Total Aktivitas" dan "Sales Terbaik" menghitung semua kategori.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -36,6 +34,29 @@ const TRACKED_ACTIVITY_KEYS = [
     'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'
 ];
 
+// <<< BARU: Duplikasi konfigurasi target dari app.js >>>
+// NOTE: Idealnya ini ada di file konfigurasi bersama.
+const TARGET_CONFIG = {
+    daily: [
+        { id: 1, name: "Menginput Data Lead", target: 20, dataKey: 'leads', dateField: 'timestamp' },
+        { id: 3, name: "Promosi Campaign Package", target: 2, dataKey: 'promosi', dateField: 'timestamp' }
+    ],
+    weekly: [
+        { id: 4, name: "Canvasing dan Pitching", target: 1, dataKey: 'canvasing', dateField: 'timestamp' },
+        { id: 5, name: "Door-to-door perusahaan", target: 3, dataKey: 'doorToDoor', dateField: 'timestamp' },
+        { id: 6, name: "Menyampaikan Quotation", target: 1, dataKey: 'quotations', dateField: 'timestamp' },
+        { id: 7, name: "Survey pengunjung Co-living", target: 4, dataKey: 'surveys', dateField: 'timestamp' },
+        { id: 8, name: "Laporan Ringkas Mingguan", target: 1, dataKey: 'reports', dateField: 'timestamp' },
+        { id: 9, name: "Input CRM Survey kompetitor", target: 1, dataKey: 'crmSurveys', dateField: 'timestamp' },
+        { id: 10, name: "Konversi Booking Venue Barter", target: 1, dataKey: 'conversions', dateField: 'timestamp' }
+    ],
+    monthly: [
+        { id: 13, name: "Mengikuti Event/Networking", target: 1, dataKey: 'events', dateField: 'timestamp' },
+        { id: 14, name: "Launch Campaign Package", target: 1, dataKey: 'campaigns', dateField: 'timestamp' }
+    ]
+};
+
+
 const CHART_COLORS = [
     'rgba(50, 184, 198, 0.7)', 'rgba(94, 82, 64, 0.7)', 'rgba(230, 129, 97, 0.7)',
     'rgba(255, 205, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)',
@@ -46,7 +67,7 @@ const CHART_COLORS = [
 let allData = {};
 let previousAllData = {};
 let salesList = [];
-let chartInstances = {}; // Menyimpan semua instance grafik untuk dihancurkan nanti
+let chartInstances = {};
 let isFetching = false;
 
 // =================================================================================
@@ -94,7 +115,8 @@ async function loadInitialData(isInitialLoad = false) {
 function updateAllUI() {
     updateStatCards();
     updateLeaderboard();
-    renderVisualizations(); // Fungsi render utama yang baru
+    renderVisualizations();
+    renderTargetAchievementSummary(); // <<< BARU: Panggil fungsi ringkasan target
 }
 
 // =================================================================================
@@ -145,14 +167,12 @@ function updateLeaderboard() {
 }
 
 // =================================================================================
-// <<< FUNGSI VISUALISASI BARU >>>
+// FUNGSI VISUALISASI
 // =================================================================================
 
 function destroyAllCharts() {
     for (const chartId in chartInstances) {
-        if (chartInstances[chartId]) {
-            chartInstances[chartId].destroy();
-        }
+        if (chartInstances[chartId]) chartInstances[chartId].destroy();
     }
     chartInstances = {};
 }
@@ -163,9 +183,6 @@ function renderVisualizations() {
     renderIndividualSalesCharts();
 }
 
-/**
- * Membuat grafik batang untuk membandingkan total aktivitas per kategori.
- */
 function renderCategoryComparisonChart() {
     const ctx = document.getElementById('categoryComparisonChart')?.getContext('2d');
     if (!ctx) return;
@@ -179,28 +196,16 @@ function renderCategoryComparisonChart() {
         type: 'bar',
         data: {
             labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)),
-            datasets: [{
-                label: 'Total Input',
-                data: data,
-                backgroundColor: CHART_COLORS,
-            }]
+            datasets: [{ label: 'Total Input', data: data, backgroundColor: CHART_COLORS }]
         },
-        options: {
-            indexAxis: 'y', // Membuat bar menjadi horizontal
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } }
-        }
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
     });
 }
 
-/**
- * Membuat grafik donat untuk setiap sales.
- */
 function renderIndividualSalesCharts() {
     const container = document.getElementById('individualSalesCharts');
     if (!container) return;
-    container.innerHTML = ''; // Kosongkan kontainer
+    container.innerHTML = '';
     const monthStart = getMonthStart();
 
     salesList.forEach(salesName => {
@@ -215,51 +220,103 @@ function renderIndividualSalesCharts() {
             }
         });
 
-        // Hanya buat grafik jika ada data
         if (chartData.length > 0) {
             const chartId = `salesChart_${salesName.replace(/\s+/g, '')}`;
             const chartContainer = document.createElement('div');
             chartContainer.className = 'individual-chart-container';
-            chartContainer.innerHTML = `
-                <h5>${salesName}</h5>
-                <div class="chart-container" style="height: 300px;">
-                    <canvas id="${chartId}"></canvas>
-                </div>`;
+            chartContainer.innerHTML = `<h5>${salesName}</h5><div class="chart-container" style="height: 300px;"><canvas id="${chartId}"></canvas></div>`;
             container.appendChild(chartContainer);
 
             const ctx = document.getElementById(chartId).getContext('2d');
             chartInstances[chartId] = new Chart(ctx, {
                 type: 'doughnut',
-                data: {
-                    labels: chartLabels,
-                    datasets: [{
-                        data: chartData,
-                        backgroundColor: CHART_COLORS,
-                        borderColor: 'var(--color-surface)',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 10,
-                                boxWidth: 12
-                            }
-                        }
-                    }
-                }
+                data: { labels: chartLabels, datasets: [{ data: chartData, backgroundColor: CHART_COLORS, borderColor: 'var(--color-surface)', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 10, boxWidth: 12 } } } }
             });
         }
     });
 }
 
 // =================================================================================
+// <<< FUNGSI BARU: RINGKASAN KETERCAPAIAN TARGET >>>
+// =================================================================================
+
+/**
+ * Helper function to calculate achievement for a specific sales and target.
+ */
+function calculateAchievementForTarget(salesName, target) {
+    if (!target.dataKey || !target.dateField) return 0;
+
+    const data = (allData[target.dataKey] || []).filter(d => d.sales === salesName);
+    if (data.length === 0) return 0;
+
+    const today = new Date();
+    const weekStart = getWeekStart(today);
+    const monthStart = getMonthStart(today);
+
+    return data.filter(d => {
+        const itemDateStr = d[target.dateField];
+        if (!itemDateStr) return false;
+        const itemDate = new Date(itemDateStr);
+        if (isNaN(itemDate.getTime())) return false;
+
+        if (TARGET_CONFIG.daily.some(t => t.id === target.id)) {
+            return itemDate.toDateString() === today.toDateString();
+        }
+        if (TARGET_CONFIG.weekly.some(t => t.id === target.id)) {
+            return itemDate >= weekStart && itemDate <= today;
+        }
+        if (TARGET_CONFIG.monthly.some(t => t.id === target.id)) {
+            return itemDate >= monthStart && itemDate <= today;
+        }
+        return false;
+    }).length;
+}
+
+/**
+ * Merender ringkasan ketercapaian target untuk setiap sales.
+ */
+function renderTargetAchievementSummary() {
+    const container = document.getElementById('targetAchievementSummary');
+    if (!container) return;
+    container.innerHTML = ''; // Kosongkan kontainer
+
+    salesList.forEach(salesName => {
+        const salesCard = document.createElement('div');
+        salesCard.className = 'sales-target-card';
+
+        let cardHTML = `<h5>${salesName}</h5>`;
+        
+        ['daily', 'weekly', 'monthly'].forEach(period => {
+            TARGET_CONFIG[period].forEach(target => {
+                const achieved = calculateAchievementForTarget(salesName, target);
+                const percentage = target.target > 0 ? Math.min(100, Math.round((achieved / target.target) * 100)) : 0;
+                
+                cardHTML += `
+                    <div class="target-item">
+                        <span class="target-name">${target.name} (${period.charAt(0).toUpperCase()})</span>
+                        <div class="target-progress-details">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" style="width: ${percentage}%;"></div>
+                            </div>
+                            <span class="progress-text">${achieved}/${target.target}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        salesCard.innerHTML = cardHTML;
+        container.appendChild(salesCard);
+    });
+}
+
+
+// =================================================================================
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
+
+function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
 
 function getMonthStart(date = new Date()) {
     const today = new Date(date);
