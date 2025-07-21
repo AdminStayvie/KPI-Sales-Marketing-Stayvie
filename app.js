@@ -1,7 +1,11 @@
 /**
  * @file app.js
- * @description Logika utama untuk dashboard KPI.
- * @version 3.1.0
+ * @description Logika utama untuk dashboard KPI Sales.
+ * @version 3.2.0
+ *
+ * Perubahan Utama (v3.2.0):
+ * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
+ * - CLEANUP: Menghapus kode yang berulang dan menyederhanakan inisialisasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -60,7 +64,7 @@ const CONFIG = {
 // --- STATE APLIKASI ---
 let currentData = { settings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
-let selectedYear, selectedPeriod;
+
 
 // =================================================================================
 // FUNGSI INTI (Core Functions)
@@ -342,96 +346,22 @@ function closeModal() {
 }
 
 // =================================================================================
-// FUNGSI FILTER
+// FUNGSI UTILITY & INISIALISASI
 // =================================================================================
-function setupFilters() {
-    const yearFilter = document.getElementById('yearFilter');
-    const periodFilter = document.getElementById('periodFilter');
-    if (!yearFilter || !periodFilter) return;
-
-    const currentYear = new Date().getFullYear();
-    for (let i = currentYear; i >= currentYear - 2; i--) {
-        yearFilter.innerHTML += `<option value="${i}">${i}</option>`;
-    }
-    selectedYear = yearFilter.value;
-    generatePeriodOptions();
-    
-    yearFilter.addEventListener('change', (e) => { selectedYear = e.target.value; generatePeriodOptions(); updateAllUI(); });
-    periodFilter.addEventListener('change', (e) => { selectedPeriod = e.target.value; updateAllUI(); });
-}
-
-function generatePeriodOptions() {
-    const periodFilter = document.getElementById('periodFilter');
-    periodFilter.innerHTML = '';
-    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-    for (let i = 0; i < 12; i++) {
-        const month1 = months[i];
-        const month2 = months[(i + 1) % 12];
-        const value = `${i}-${(i + 1) % 12}`;
-        periodFilter.innerHTML += `<option value="${value}">${month1} - ${month2}</option>`;
-    }
-    const now = new Date();
-    const currentDay = now.getDate();
-    let currentMonthIndex = now.getMonth();
-    if (currentDay < 21) {
-        currentMonthIndex = (currentMonthIndex - 1 + 12) % 12;
-    }
-    const nextMonthIndex = (currentMonthIndex + 1) % 12;
-    selectedPeriod = `${currentMonthIndex}-${nextMonthIndex}`;
-    periodFilter.value = selectedPeriod;
-}
-
-function getPeriodStartDate() {
-    if (!selectedYear || !selectedPeriod) return new Date(new Date().getFullYear(), 0, 1);
-    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
-    return new Date(selectedYear, startMonthIndex, 21);
-}
-
-function getPeriodEndDate() {
-    if (!selectedYear || !selectedPeriod) return new Date();
-    const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
-    const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear;
-    const endDate = new Date(endYear, endMonthIndex, 20);
-    endDate.setHours(23, 59, 59, 999);
-    return endDate;
-}
-
-function getDatesForPeriod() {
-    const startDate = getPeriodStartDate();
-    const endDate = getPeriodEndDate();
-    const dates = [];
-    let currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-        dates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return dates;
-}
-
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) return true;
+    if (date.getDay() === 0) return true; // Hari Minggu libur
     const dateString = toLocalDateString(date);
     return (currentData.timeOff || []).some(off => 
         off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
     );
 }
 
-// =================================================================================
-// FUNGSI UTILITY & INISIALISASI
-// =================================================================================
-function toBase64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = error => reject(error); }); }
-function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
-function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); if (isNaN(date.getTime())) return 'Invalid Date'; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
-function getCurrentDateString() { const today = new Date(); return today.toISOString().split('T')[0]; }
-function getLocalTimestampString() { const now = new Date(); const tzo = -now.getTimezoneOffset(), dif = tzo >= 0 ? '+' : '-', pad = num => (num < 10 ? '0' : '') + num; return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()) + dif + pad(Math.floor(Math.abs(tzo) / 60)) + ':' + pad(Math.abs(tzo) % 60); }
-function getDatestamp() { return new Date().toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
-function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-function toLocalDateString(date) { const year = date.getFullYear(); const month = (date.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; }
-function isWithinCutoffTime() { return new Date().getHours() < 16; }
-function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
-function showContentPage(pageId) { document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active')); document.getElementById(pageId)?.classList.add('active'); document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active')); document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active'); }
-function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
-function showMessage(message, type = 'info') { const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; const mc = document.querySelector('.main-content'); if (mc) { mc.insertBefore(n, mc.firstChild); setTimeout(() => n.remove(), 4000); } }
+function showContentPage(pageId) {
+    document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
+    document.getElementById(pageId)?.classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
+}
 
 function setupEventListeners() {
     document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
@@ -444,10 +374,14 @@ function initializeApp() {
     if (!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
     Object.keys(CONFIG.targets).flatMap(p => CONFIG.targets[p]).forEach(t => { currentData.settings[t.id] = true; });
+    
     updateDateTime();
     setInterval(updateDateTime, 60000);
+    
     setupEventListeners();
-    setupFilters();
+    // Gunakan setupFilters dari utils.js dan berikan updateAllUI sebagai callback
+    setupFilters(updateAllUI); 
+    
     loadInitialData();
 }
 
