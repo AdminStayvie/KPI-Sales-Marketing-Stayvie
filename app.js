@@ -1,15 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.5.0
+ * @version 3.6.0
  *
- * Perubahan Utama (v3.5.0):
- * - FITUR: Setiap baris di tabel rekap sekarang dapat diklik untuk menampilkan modal dengan informasi detail.
- * - FITUR: Menambahkan modal detail generik yang kontennya dibuat secara dinamis.
+ * Perubahan Utama (v3.6.0):
+ * - BUG FIX: Memperbaiki logika format tanggal di modal detail yang menyebabkan "Invalid Date" pada beberapa field.
+ * - BUG FIX: Memastikan semua baris di semua tabel rekap dapat diklik untuk membuka modal detail, bahkan jika baris tersebut berisi link.
  *
  * Perubahan Sebelumnya:
+ * - FITUR: Menambahkan modal detail generik untuk semua data rekap.
  * - BUG FIX: Tabel rekap "Semua Data Leads" sekarang merespons filter periode.
- * - BUG FIX: Memperbaiki format baris tabel (rowGenerator).
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -53,7 +53,7 @@ const CONFIG = {
             headers: ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'], 
             rowGenerator: generateLeadRow,
             detailLabels: {
-                datestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
+                timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
                 product: 'Produk', contact: 'Kontak', notes: 'Catatan Awal', status: 'Status',
                 updateNotes: 'Catatan Update'
             }
@@ -61,7 +61,7 @@ const CONFIG = {
         'Canvasing': { 
             dataKey: 'canvasing', 
             headers: ['Waktu', 'Judul Meeting', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`,
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank" onclick="event.stopPropagation()">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`,
             detailLabels: {
                 datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', fileUrl: 'File', notes: 'Catatan'
             }
@@ -95,13 +95,13 @@ const CONFIG = {
         'Reports': { 
             dataKey: 'reports', 
             headers: ['Waktu', 'Periode', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`, 
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank" onclick="event.stopPropagation()">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } 
         },
         'CRMSurveys': { 
             dataKey: 'crmSurveys', 
             headers: ['Waktu', 'Kompetitor', 'Website'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td></tr>`, 
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank" onclick="event.stopPropagation()">Link</a>` : '-'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } 
         },
         'Conversions': { 
@@ -445,11 +445,14 @@ function openDetailModal(dataKey, itemId) {
     const modalTitle = document.getElementById('detailModalTitle');
     const modalBody = document.getElementById('detailModalBody');
     
-    modalTitle.textContent = `Detail ${mapping.headers[1] || 'Data'}`; // Ambil judul dari header kedua
-    modalBody.innerHTML = ''; // Kosongkan konten sebelumnya
+    modalTitle.textContent = `Detail ${mapping.headers[1] || 'Data'}`;
+    modalBody.innerHTML = '';
 
     const detailList = document.createElement('dl');
     detailList.className = 'detail-list';
+
+    // PERBAIKAN: Daftar field yang secara eksplisit dianggap sebagai tanggal
+    const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
 
     for (const key in mapping.detailLabels) {
         if (Object.prototype.hasOwnProperty.call(item, key) && item[key]) {
@@ -459,13 +462,13 @@ function openDetailModal(dataKey, itemId) {
             const dd = document.createElement('dd');
             let value = item[key];
 
-            // Format nilai berdasarkan kunci
-            if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
-                value = formatCurrency(value);
-            } else if (key.toLowerCase().includes('date')) {
+            // PERBAIKAN: Logika format yang lebih spesifik
+            if (dateFields.includes(key)) {
                 value = formatDate(value);
-            } else if (key.toLowerCase().includes('url') || key.toLowerCase().includes('website') || key.toLowerCase().includes('doc') || key.toLowerCase().includes('file') || key.toLowerCase().includes('screenshot') || key.toLowerCase().includes('proof') || key.toLowerCase().includes('material')) {
-                dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
+            } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
+                value = formatCurrency(value);
+            } else if (typeof value === 'string' && (value.startsWith('http') || value.startsWith('blob'))) {
+                 dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
                 detailList.appendChild(dt);
                 detailList.appendChild(dd);
                 continue;
