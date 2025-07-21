@@ -1,14 +1,11 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 3.0.0
+ * @version 3.2.0
  *
- * Perubahan Utama (v3.0.0):
- * - PERBAIKAN LOGIKA DENDA: Logika perhitungan denda mingguan sekarang dihitung secara akurat untuk SETIAP minggu dalam periode yang dipilih, bukan hanya sekali. Ini membuat perhitungan denda jauh lebih akurat.
- *
- * Perubahan Sebelumnya:
- * - RESTRUKTURISASI UI: Memisahkan "Pengaturan Hari Libur & Izin" ke halaman terpisah.
- * - FITUR BARU: Hari Minggu secara otomatis dianggap sebagai hari libur.
+ * Perubahan Utama (v3.2.0):
+ * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
+ * - CLEANUP: Menghapus kode yang berulang dan menyederhanakan inisialisasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -57,7 +54,6 @@ let allData = {};
 let previousAllData = {};
 let allSalesUsers = [];
 let isFetching = false;
-let selectedYear, selectedPeriod;
 
 // =================================================================================
 // FUNGSI UTAMA
@@ -87,14 +83,12 @@ async function loadInitialData(isInitialLoad = false) {
                 }
                 
                 if (isInitialLoad) {
-                    setupFilters();
                     setupTimeOffForm();
                 }
                 updateAllUI();
                 if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
             } else if (isInitialLoad) {
                 if (isInitialLoad) {
-                    setupFilters();
                     setupTimeOffForm();
                 }
                 updateAllUI();
@@ -220,7 +214,7 @@ function calculatePenalties(periodStartDate, periodEndDate) {
             penalties.bySales[salesName] += missedDays * target.penalty;
         });
 
-        // <<< PERBAIKAN LOGIKA: Cek Denda Mingguan untuk setiap minggu
+        // Cek Denda Mingguan untuk setiap minggu
         const sundaysInPeriod = periodDates.filter(date => date.getDay() === 0);
         TARGET_CONFIG.weekly.forEach(target => {
             let missedWeeks = 0;
@@ -257,63 +251,8 @@ function calculatePenalties(periodStartDate, periodEndDate) {
 // =================================================================================
 // FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER)
 // =================================================================================
-
-function setupFilters() {
-    const yearFilter = document.getElementById('yearFilter');
-    const periodFilter = document.getElementById('periodFilter');
-    const currentYear = new Date().getFullYear();
-    for (let i = currentYear; i >= currentYear - 2; i--) {
-        yearFilter.innerHTML += `<option value="${i}">${i}</option>`;
-    }
-    selectedYear = yearFilter.value;
-    generatePeriodOptions();
-    
-    yearFilter.addEventListener('change', (e) => {
-        selectedYear = e.target.value;
-        generatePeriodOptions();
-        updateAllUI();
-    });
-    periodFilter.addEventListener('change', (e) => {
-        selectedPeriod = e.target.value;
-        updateAllUI();
-    });
-}
-
-function generatePeriodOptions() {
-    const periodFilter = document.getElementById('periodFilter');
-    periodFilter.innerHTML = '';
-    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-    for (let i = 0; i < 12; i++) {
-        const month1 = months[i];
-        const month2 = months[(i + 1) % 12];
-        const value = `${i}-${(i + 1) % 12}`;
-        periodFilter.innerHTML += `<option value="${value}">${month1} - ${month2}</option>`;
-    }
-    const now = new Date();
-    const currentDay = now.getDate();
-    let currentMonthIndex = now.getMonth();
-    if (currentDay < 21) {
-        currentMonthIndex = (currentMonthIndex - 1 + 12) % 12;
-    }
-    const nextMonthIndex = (currentMonthIndex + 1) % 12;
-    selectedPeriod = `${currentMonthIndex}-${nextMonthIndex}`;
-    periodFilter.value = selectedPeriod;
-}
-
-function getDatesForPeriod() {
-    const startDate = getPeriodStartDate();
-    const endDate = getPeriodEndDate();
-    const dates = [];
-    let currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-        dates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return dates;
-}
-
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) {
+    if (date.getDay() === 0) { // Hari Minggu libur
         return true;
     }
     const dateString = toLocalDateString(date);
@@ -445,7 +384,7 @@ function renderTimeOffList() {
     if (!container) return;
     container.innerHTML = '';
 
-    (allData.timeOff || []).forEach(item => {
+    (allData.timeOff || []).sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
         const li = document.createElement('li');
         const displayDate = new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', {
             year: 'numeric', month: 'long', day: 'numeric'
@@ -460,8 +399,7 @@ function renderTimeOffList() {
     container.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const id = e.target.dataset.id;
-            const userConfirmed = confirm('Anda yakin ingin menghapus data ini?');
-            if (userConfirmed) {
+            if (confirm('Anda yakin ingin menghapus data ini?')) {
                 const payload = { action: 'deleteTimeOff', id };
                 try {
                     const response = await fetch(SCRIPT_URL, {
@@ -497,24 +435,10 @@ function showContentPage(pageId) {
     document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
 }
 
-function toLocalDateString(date) {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
-function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-function getPeriodStartDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex] = selectedPeriod.split('-').map(Number); return new Date(selectedYear, startMonthIndex, 21); }
-function getPeriodEndDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number); const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear; const endDate = new Date(endYear, endMonthIndex, 20); endDate.setHours(23, 59, 59, 999); return endDate; }
-function showMessage(message, type = 'info') { const el = document.querySelector('.message'); if(el) el.remove(); const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; document.querySelector('.main-content')?.insertBefore(n, document.querySelector('.main-content').firstChild); setTimeout(() => n.remove(), 4000); }
-function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
-function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
-
 function initializeApp() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    
     updateDateTime();
     setInterval(updateDateTime, 60000);
     
@@ -524,6 +448,9 @@ function initializeApp() {
             showContentPage(link.dataset.page);
         });
     });
+
+    // Gunakan setupFilters dari utils.js dan berikan updateAllUI sebagai callback
+    setupFilters(updateAllUI);
 
     loadInitialData(true); 
     setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
