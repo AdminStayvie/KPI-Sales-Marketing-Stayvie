@@ -1,15 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.8.0
+ * @version 3.9.0
  *
- * Perubahan Utama (v3.8.0):
- * - BUG FIX: Menghapus link aktif dari dalam tabel rekap untuk mencegah konflik event klik. Link sekarang hanya bisa diakses melalui modal detail.
- * - UX: Mengganti tampilan link di tabel dengan teks indikator seperti "Ada File" atau "Ada Link".
+ * Perubahan Utama (v3.9.0):
+ * - FITUR: Menambahkan kolom "Bukti Lead" pada form input lead.
+ * - BUG FIX: Memperbaiki logika `handleFormSubmit` untuk dapat memproses upload file (seperti "Bukti Lead") dengan mengubahnya menjadi Base64. Perbaikan ini juga berlaku untuk semua form lain yang memiliki input file.
  *
  * Perubahan Sebelumnya:
  * - REFACTOR: Mengganti nama variabel 'updateNotes' menjadi 'statusLog'.
- * - BUG FIX: Memperbaiki logika format tanggal di modal detail.
+ * - BUG FIX: Menghapus link aktif dari dalam tabel rekap.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -54,17 +54,17 @@ const CONFIG = {
             rowGenerator: generateLeadRow,
             detailLabels: {
                 timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
-                product: 'Produk', contact: 'Kontak', notes: 'Catatan Awal', status: 'Status',
+                product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', // PERUBAHAN: Menambahkan label untuk bukti lead
+                notes: 'Catatan Awal', status: 'Status',
                 statusLog: 'Log Status'
             }
         },
         'Canvasing': { 
             dataKey: 'canvasing', 
             headers: ['Waktu', 'Judul Meeting', 'File'], 
-            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? 'Ada File' : 'N/A'}</td></tr>`,
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.document ? 'Ada File' : 'N/A'}</td></tr>`,
             detailLabels: {
-                datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', fileUrl: 'File', notes: 'Catatan'
+                datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan'
             }
         },
         'Promosi': { 
@@ -96,14 +96,12 @@ const CONFIG = {
         'Reports': { 
             dataKey: 'reports', 
             headers: ['Waktu', 'Periode', 'File'], 
-            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? 'Ada File' : 'N/A'}</td></tr>`, 
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.reportDoc ? 'Ada File' : 'N/A'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } 
         },
         'CRMSurveys': { 
             dataKey: 'crmSurveys', 
             headers: ['Waktu', 'Kompetitor', 'Website'], 
-            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
             rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } 
         },
@@ -200,14 +198,42 @@ async function loadInitialData() {
 // =================================================================================
 // FORM HANDLING
 // =================================================================================
-function handleFormSubmit(e) {
+
+// PERUBAHAN: Menambahkan fungsi helper untuk konversi file ke Base64
+function toBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+}
+
+// PERUBAHAN: Memperbarui handleFormSubmit untuk memproses file
+async function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
     const sheetName = form.dataset.sheetName;
     if (!sheetName) return;
 
     const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
+    const data = {};
+    for (const [key, value] of formData.entries()) {
+        if (typeof value !== 'object' || value === null) { 
+            data[key] = value;
+        }
+    }
+
+    const fileInput = form.querySelector('input[type="file"]');
+    if (fileInput && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        data[fileInput.name] = {
+            fileName: file.name,
+            mimeType: file.type,
+            data: await toBase64(file)
+        };
+    }
+
     data.id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     data.sales = currentUser.name;
     data.timestamp = getLocalTimestampString();
@@ -220,6 +246,7 @@ function handleFormSubmit(e) {
     const payload = { sheetName, data };
     sendData('saveData', payload, e);
 }
+
 
 function handleUpdateLead(e) {
     e.preventDefault();
@@ -434,7 +461,6 @@ function closeModal() {
     }
 }
 
-// --- FUNGSI BARU UNTUK MODAL DETAIL ---
 function openDetailModal(dataKey, itemId) {
     const mapping = Object.values(CONFIG.dataMapping).find(m => m.dataKey === dataKey);
     const item = currentData[dataKey]?.find(d => d.id === itemId);
@@ -468,6 +494,11 @@ function openDetailModal(dataKey, itemId) {
                 value = formatDate(value);
             } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
                 value = formatCurrency(value);
+            } else if (typeof value === 'object' && value.hasOwnProperty('fileName')) { // Handle file object
+                 dd.innerHTML = `<a href="${value.fileUrl}" target="_blank" rel="noopener noreferrer">${value.fileName}</a>`;
+                detailList.appendChild(dt);
+                detailList.appendChild(dd);
+                continue;
             } else if (typeof value === 'string' && (value.startsWith('http') || value.startsWith('blob'))) {
                  dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
                 detailList.appendChild(dt);
