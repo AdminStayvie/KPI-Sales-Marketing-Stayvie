@@ -64,6 +64,66 @@
             font-size: var(--font-size-lg);
             color: var(--color-text);
         }
+        /* <<< CSS BARU UNTUK RINGKASAN TARGET >>> */
+        .target-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: var(--space-24);
+        }
+        .sales-target-card {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: var(--space-16);
+            background-color: var(--color-background);
+        }
+        .sales-target-card h5 {
+            margin-bottom: var(--space-16);
+            border-bottom: 1px solid var(--color-card-border-inner);
+            padding-bottom: var(--space-8);
+            font-size: var(--font-size-xl);
+        }
+        .target-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: var(--space-8) 0;
+          border-bottom: 1px solid var(--color-card-border-inner);
+        }
+        .target-item:last-child {
+            border-bottom: none;
+        }
+        .target-name {
+          font-weight: var(--font-weight-medium);
+          font-size: var(--font-size-sm);
+          flex-basis: 50%;
+          color: var(--color-text-secondary);
+        }
+        .target-progress-details {
+            flex-basis: 50%;
+            display: flex;
+            align-items: center;
+            gap: var(--space-12);
+        }
+        .progress-bar-container {
+          flex: 1;
+          height: 8px;
+          background-color: var(--color-secondary);
+          border-radius: var(--radius-full);
+          overflow: hidden;
+        }
+        .progress-bar-fill {
+          height: 100%;
+          background-color: var(--color-primary);
+          border-radius: var(--radius-full);
+          transition: width var(--duration-normal) var(--ease-standard);
+          width: 0%;
+        }
+        .progress-text {
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            min-width: 50px;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -118,7 +178,7 @@
                     </div>
                 </div>
 
-                <!-- <<< PERUBAHAN BESAR: Area Visualisasi Baru >>> -->
+                <!-- Area Visualisasi Kinerja Tim -->
                 <div class="card">
                     <div class="card__header">
                         <h3>Visualisasi Kinerja Tim</h3>
@@ -138,6 +198,18 @@
                         <h4>Rincian Aktivitas per Sales (Bulan Ini)</h4>
                         <div id="individualSalesCharts" class="individual-charts-grid">
                             <!-- Grafik individual akan dibuat oleh JavaScript di sini -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- <<< HALAMAN BARU: Ringkasan Ketercapaian Target >>> -->
+                <div class="card">
+                    <div class="card__header">
+                        <h3>Ringkasan Ketercapaian Target Sales</h3>
+                    </div>
+                    <div class="card__body">
+                        <div id="targetAchievementSummary" class="target-summary-grid">
+                            <!-- Ringkasan per sales akan dibuat oleh JavaScript di sini -->
                         </div>
                     </div>
                 </div>
