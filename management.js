@@ -1,19 +1,15 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.8.0
+ * @version 1.9.0
  *
- * Perubahan Utama (v1.8.0):
- * - FITUR UTAMA: Merombak total "Ringkasan Ketercapaian Target" menjadi "Laporan Kinerja Rinci".
- * - Tampilan per Tab: Setiap sales memiliki tab sendiri.
- * - Filter Periode: Menambahkan filter tahun dan periode bulan (misal: Jun-Jul).
- * - Tampilan Kalender: Menampilkan tabel dengan tanggal sebagai kolom dan target sebagai baris.
- * - Indikator Kinerja: Menampilkan (✓/✗) untuk target harian dan (progres/target) untuk mingguan/bulanan.
- * - PENGAMBILAN DATA: Logika sekarang siap menerima daftar semua pengguna dari server untuk memastikan semua sales (termasuk yang belum aktif) bisa ditampilkan.
+ * Perubahan Utama (v1.9.0):
+ * - PENGHAPUSAN FITUR: Menghapus seluruh bagian "Visualisasi Kinerja Tim" (grafik batang dan donat) sesuai permintaan.
+ * - FOKUS: Dashboard sekarang lebih fokus pada statistik utama, papan peringkat, dan laporan kinerja rinci.
  *
  * Perubahan Sebelumnya:
- * - Menambahkan "Ringkasan Ketercapaian Target Sales" dengan progress bar.
- * - RESTRUKTURISASI VISUAL: Memisahkan grafik menjadi beberapa visualisasi.
+ * - FITUR UTAMA: Menambahkan "Laporan Kinerja Rinci" dengan tampilan tab dan kalender.
+ * - PENGAMBILAN DATA: Siap menerima daftar semua pengguna dari server.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -58,12 +54,9 @@ const TARGET_CONFIG = {
     ]
 };
 
-const CHART_COLORS = ['rgba(50, 184, 198, 0.7)', 'rgba(94, 82, 64, 0.7)', 'rgba(230, 129, 97, 0.7)', 'rgba(255, 205, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)', 'rgba(201, 203, 207, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(12, 65, 99, 0.7)'];
-
 let allData = {};
 let previousAllData = {};
-let allSalesUsers = []; // <<< Daftar semua user sales dari server
-let chartInstances = {};
+let allSalesUsers = [];
 let isFetching = false;
 let selectedYear, selectedPeriod;
 
@@ -77,7 +70,7 @@ async function loadInitialData(isInitialLoad = false) {
     if (isInitialLoad) showMessage("Memuat data tim dari server...", "info");
     
     try {
-        const fetchUrl = `${SCRIPT_URL}?action=getAllData&includeUsers=true&t=${new Date().getTime()}`; // Minta data user
+        const fetchUrl = `${SCRIPT_URL}?action=getAllData&includeUsers=true&t=${new Date().getTime()}`;
         const response = await fetch(fetchUrl, { mode: 'cors' });
         const result = await response.json();
 
@@ -86,7 +79,6 @@ async function loadInitialData(isInitialLoad = false) {
             if (JSON.stringify(allData) !== JSON.stringify(previousAllData)) {
                 previousAllData = JSON.parse(JSON.stringify(allData));
                 
-                // <<< Gunakan daftar user dari server, fallback ke data aktivitas
                 if (allData.users && allData.users.length > 0) {
                     allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
                 } else {
@@ -114,8 +106,7 @@ async function loadInitialData(isInitialLoad = false) {
 function updateAllUI() {
     updateStatCards();
     updateLeaderboard();
-    renderVisualizations();
-    renderTabbedTargetSummary(); // <<< Panggil fungsi laporan baru
+    renderTabbedTargetSummary();
 }
 
 // =================================================================================
@@ -159,39 +150,11 @@ function updateLeaderboard() {
 }
 
 // =================================================================================
-// FUNGSI VISUALISASI (GRAFIK)
+// <<< FUNGSI DIHAPUS: Semua fungsi terkait visualisasi grafik >>>
 // =================================================================================
 
-function destroyAllCharts() { Object.values(chartInstances).forEach(chart => chart.destroy()); chartInstances = {}; }
-function renderVisualizations() { destroyAllCharts(); renderCategoryComparisonChart(); renderIndividualSalesCharts(); }
-
-function renderCategoryComparisonChart() {
-    const ctx = document.getElementById('categoryComparisonChart')?.getContext('2d');
-    if (!ctx) return;
-    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
-    const data = TRACKED_ACTIVITY_KEYS.map(key => (allData[key] || []).filter(d => new Date(d.timestamp) >= monthStart).length);
-    chartInstances.categoryComparison = new Chart(ctx, { type: 'bar', data: { labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)), datasets: [{ label: 'Total Input', data: data, backgroundColor: CHART_COLORS }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-}
-
-function renderIndividualSalesCharts() {
-    const container = document.getElementById('individualSalesCharts');
-    if (!container) return;
-    container.innerHTML = '';
-    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
-
-    allSalesUsers.forEach(salesName => {
-        const chartData = TRACKED_ACTIVITY_KEYS.map(key => (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length);
-        if (chartData.some(d => d > 0)) {
-            const chartId = `salesChart_${salesName.replace(/\s+/g, '')}`;
-            container.innerHTML += `<div class="individual-chart-container"><h5>${salesName}</h5><div class="chart-container" style="height: 300px;"><canvas id="${chartId}"></canvas></div></div>`;
-            const ctx = document.getElementById(chartId).getContext('2d');
-            chartInstances[chartId] = new Chart(ctx, { type: 'doughnut', data: { labels: TRACKED_ACTIVITY_KEYS.map(k => k.charAt(0).toUpperCase() + k.slice(1)), datasets: [{ data: chartData, backgroundColor: CHART_COLORS, borderColor: 'var(--color-surface)', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 10, boxWidth: 12 } } } } });
-        }
-    });
-}
-
 // =================================================================================
-// <<< FUNGSI BARU: LAPORAN KINERJA RINCI (TABEL KALENDER) >>>
+// FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER)
 // =================================================================================
 
 function setupFilters() {
@@ -225,7 +188,6 @@ function generatePeriodOptions() {
         const value = `${i}-${(i + 1) % 12}`;
         periodFilter.innerHTML += `<option value="${value}">${month1} - ${month2}</option>`;
     }
-    // Set default ke periode saat ini
     const now = new Date();
     const currentDay = now.getDate();
     let currentMonthIndex = now.getMonth();
