@@ -1,14 +1,14 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.0.0
+ * @version 2.1.0
  *
- * Perubahan Utama (v2.0.0):
- * - KONSISTENSI FILTER: Filter tahun dan periode sekarang mengontrol SEMUA data yang ditampilkan di dashboard, termasuk Kartu Statistik dan Papan Peringkat. Ini memastikan semua komponen sinkron.
- * - OPTIMISASI: Logika untuk mendapatkan tanggal mulai periode (getMonthStart) sekarang menerima parameter dari filter, membuatnya lebih fleksibel.
+ * Perubahan Utama (v2.1.0):
+ * - PERBAIKAN BUG KRITIS: Filter sekarang menggunakan rentang tanggal lengkap (mulai DAN akhir) untuk Kartu Statistik dan Papan Peringkat. Ini memperbaiki bug di mana data dari bulan mendatang ikut terhitung.
+ * - KONSISTENSI DATA: Semua komponen di dashboard sekarang sepenuhnya sinkron dengan filter periode yang dipilih.
  *
  * Perubahan Sebelumnya:
- * - PENGHAPUSAN FITUR: Menghapus bagian visualisasi grafik.
+ * - KONSISTENSI FILTER: Filter tahun dan periode mengontrol semua komponen.
  * - FITUR UTAMA: Menambahkan "Laporan Kinerja Rinci" dengan tampilan tab dan kalender.
  */
 
@@ -104,10 +104,10 @@ async function loadInitialData(isInitialLoad = false) {
 }
 
 function updateAllUI() {
-    // <<< PERUBAHAN: Semua fungsi update sekarang menggunakan periode dari filter
     const periodStartDate = getPeriodStartDate();
-    updateStatCards(periodStartDate);
-    updateLeaderboard(periodStartDate);
+    const periodEndDate = getPeriodEndDate(); // <<< BARU: Dapatkan tanggal akhir
+    updateStatCards(periodStartDate, periodEndDate); // <<< PERUBAHAN: Kirim tanggal akhir
+    updateLeaderboard(periodStartDate, periodEndDate); // <<< PERUBAHAN: Kirim tanggal akhir
     renderTabbedTargetSummary();
 }
 
@@ -115,9 +115,14 @@ function updateAllUI() {
 // FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
 // =================================================================================
 
-function updateStatCards(periodStartDate) {
-    const leadsThisPeriod = (allData.leads || []).filter(d => new Date(d.timestamp) >= periodStartDate);
-    const canvasingThisPeriod = (allData.canvasing || []).filter(d => new Date(d.timestamp) >= periodStartDate);
+function updateStatCards(periodStartDate, periodEndDate) { // <<< PERUBAHAN: Terima tanggal akhir
+    const dateFilter = d => {
+        const itemDate = new Date(d.timestamp);
+        return itemDate >= periodStartDate && itemDate <= periodEndDate;
+    };
+
+    const leadsThisPeriod = (allData.leads || []).filter(dateFilter);
+    const canvasingThisPeriod = (allData.canvasing || []).filter(dateFilter);
     
     document.getElementById('totalLeads').textContent = leadsThisPeriod.length;
     document.getElementById('totalCanvasing').textContent = canvasingThisPeriod.length;
@@ -125,7 +130,7 @@ function updateStatCards(periodStartDate) {
     const salesPerformance = {};
     allSalesUsers.forEach(salesName => {
         salesPerformance[salesName] = TRACKED_ACTIVITY_KEYS.reduce((total, key) => 
-            total + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length, 0);
+            total + (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length, 0);
     });
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
@@ -133,15 +138,20 @@ function updateStatCards(periodStartDate) {
     document.getElementById('totalPenalty').textContent = 'Rp 0';
 }
 
-function updateLeaderboard(periodStartDate) {
+function updateLeaderboard(periodStartDate, periodEndDate) { // <<< PERUBAHAN: Terima tanggal akhir
     const container = document.getElementById('leaderboard');
     if (!container) return;
 
+    const dateFilter = d => {
+        const itemDate = new Date(d.timestamp);
+        return itemDate >= periodStartDate && itemDate <= periodEndDate;
+    };
+
     const leaderboardData = allSalesUsers.map(salesName => {
-        const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
-        const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
-        const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
-        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length, 0);
+        const leads = (allData.leads || []).filter(d => d.sales === salesName).filter(dateFilter).length;
+        const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName).filter(dateFilter).length;
+        const promosi = (allData.promosi || []).filter(d => d.sales === salesName).filter(dateFilter).length;
+        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length, 0);
         return { name: salesName, leads, canvasing, promosi, total };
     });
 
@@ -166,11 +176,11 @@ function setupFilters() {
     yearFilter.addEventListener('change', (e) => {
         selectedYear = e.target.value;
         generatePeriodOptions();
-        updateAllUI(); // <<< PERUBAHAN: Panggil updateAllUI agar semua komponen di-refresh
+        updateAllUI();
     });
     periodFilter.addEventListener('change', (e) => {
         selectedPeriod = e.target.value;
-        updateAllUI(); // <<< PERUBAHAN: Panggil updateAllUI agar semua komponen di-refresh
+        updateAllUI();
     });
 }
 
@@ -196,12 +206,8 @@ function generatePeriodOptions() {
 }
 
 function getDatesForPeriod() {
-    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
-    const startYear = selectedYear;
-    const endYear = startMonthIndex === 11 ? Number(selectedYear) + 1 : startYear;
-    
-    const startDate = new Date(startYear, startMonthIndex, 21);
-    const endDate = new Date(endYear, (startMonthIndex + 1) % 12, 20);
+    const startDate = getPeriodStartDate();
+    const endDate = getPeriodEndDate();
     
     const dates = [];
     let currentDate = new Date(startDate);
@@ -220,11 +226,11 @@ function renderTabbedTargetSummary() {
     tabsContainer.innerHTML = '';
     contentContainer.innerHTML = '';
     const periodDates = getDatesForPeriod();
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
 
     allSalesUsers.forEach((salesName, index) => {
-        const tabId = `tab-${salesName.replace(/\s+/g, '')}`;
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
-        
         tabsContainer.innerHTML += `<button class="tab-button ${index === 0 ? 'active' : ''}" data-tab="${contentId}">${salesName}</button>`;
         
         let tableHeader = '<tr><th>Target</th>';
@@ -242,13 +248,12 @@ function renderTabbedTargetSummary() {
                     if (period === 'daily') {
                         const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
                         cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'weekly' && date.getDay() === 0) { // Minggu
+                    } else if (period === 'weekly' && date.getDay() === 0) {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = `<span class="progress-fraction">${achievedThisWeek}/${target.target}</span>`;
                     } else if (period === 'monthly' && date.getDate() === 20) {
-                        const monthStart = getPeriodStartDate();
-                        const achievedThisMonth = dataForTarget.filter(d => new Date(d.timestamp) >= monthStart).length;
+                        const achievedThisMonth = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
                         cellContent = `<span class="progress-fraction">${achievedThisMonth}/${target.target}</span>`;
                     }
                     tableBody += `<td>${cellContent}</td>`;
@@ -276,21 +281,20 @@ function renderTabbedTargetSummary() {
 
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
 
-// <<< PERUBAHAN: Fungsi ini sekarang menjadi pusat untuk mendapatkan tanggal mulai periode
 function getPeriodStartDate() {
-    if (!selectedYear || !selectedPeriod) {
-        const now = new Date();
-        const day = now.getDate();
-        let m = now.getMonth();
-        let y = now.getFullYear();
-        if (day < 21) {
-            m = (m - 1 + 12) % 12;
-            if (m === 11) y--;
-        }
-        return new Date(y, m, 21);
-    }
+    if (!selectedYear || !selectedPeriod) return new Date(); // Fallback
     const [startMonthIndex] = selectedPeriod.split('-').map(Number);
     return new Date(selectedYear, startMonthIndex, 21);
+}
+
+// <<< BARU: Fungsi untuk mendapatkan tanggal akhir periode
+function getPeriodEndDate() {
+    if (!selectedYear || !selectedPeriod) return new Date(); // Fallback
+    const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
+    const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear;
+    const endDate = new Date(endYear, endMonthIndex, 20);
+    endDate.setHours(23, 59, 59, 999); // Set ke akhir hari
+    return endDate;
 }
 
 function showMessage(message, type = 'info') { const el = document.querySelector('.message'); if(el) el.remove(); const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; document.querySelector('.main-content')?.insertBefore(n, document.querySelector('.main-content').firstChild); setTimeout(() => n.remove(), 4000); }
