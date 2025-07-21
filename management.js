@@ -1,12 +1,10 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.9.0
+ * @version 3.0.0
  *
- * Perubahan Utama (v2.9.0):
- * - FITUR BARU: Implementasi penuh logika perhitungan denda di dashboard manajemen.
- * - `calculatePenalties`: Fungsi baru untuk menghitung denda berdasarkan target yang tidak tercapai pada periode yang dipilih.
- * - PENINGKATAN UI: Kartu "Total Denda Tim" dan tabel "Papan Peringkat" sekarang menampilkan total denda yang akurat sesuai dengan filter periode.
+ * Perubahan Utama (v3.0.0):
+ * - PERBAIKAN LOGIKA DENDA: Logika perhitungan denda mingguan sekarang dihitung secara akurat untuk SETIAP minggu dalam periode yang dipilih, bukan hanya sekali. Ini membuat perhitungan denda jauh lebih akurat.
  *
  * Perubahan Sebelumnya:
  * - RESTRUKTURISASI UI: Memisahkan "Pengaturan Hari Libur & Izin" ke halaman terpisah.
@@ -113,9 +111,9 @@ async function loadInitialData(isInitialLoad = false) {
 function updateAllUI() {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
-    const penalties = calculatePenalties(periodStartDate, periodEndDate); // <<< HITUNG DENDA
-    updateStatCards(periodStartDate, periodEndDate, penalties); // <<< KIRIM DENDA
-    updateLeaderboard(periodStartDate, periodEndDate, penalties); // <<< KIRIM DENDA
+    const penalties = calculatePenalties(periodStartDate, periodEndDate);
+    updateStatCards(periodStartDate, periodEndDate, penalties);
+    updateLeaderboard(periodStartDate, periodEndDate, penalties);
     renderTabbedTargetSummary();
     renderTimeOffList();
 }
@@ -144,7 +142,7 @@ function updateStatCards(periodStartDate, periodEndDate, penalties) {
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
     document.getElementById('topSales').textContent = topSales;
-    document.getElementById('totalPenalty').textContent = formatCurrency(penalties.total); // <<< TAMPILKAN DENDA
+    document.getElementById('totalPenalty').textContent = formatCurrency(penalties.total);
 }
 
 function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
@@ -192,13 +190,12 @@ function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
 }
 
 // =================================================================================
-// <<< FUNGSI BARU: LOGIKA PERHITUNGAN DENDA >>>
+// FUNGSI PERHITUNGAN DENDA
 // =================================================================================
 function calculatePenalties(periodStartDate, periodEndDate) {
     const penalties = { total: 0, bySales: {} };
     const today = new Date();
 
-    // Denda hanya dihitung jika periode yang dipilih sudah berlalu
     if (periodEndDate > today) {
         return penalties;
     }
@@ -223,14 +220,22 @@ function calculatePenalties(periodStartDate, periodEndDate) {
             penalties.bySales[salesName] += missedDays * target.penalty;
         });
 
-        // Cek Denda Mingguan
+        // <<< PERBAIKAN LOGIKA: Cek Denda Mingguan untuk setiap minggu
+        const sundaysInPeriod = periodDates.filter(date => date.getDay() === 0);
         TARGET_CONFIG.weekly.forEach(target => {
-            const achievedThisPeriod = (allData[target.dataKey] || []).filter(d => 
-                d.sales === salesName && new Date(d.timestamp) >= periodStartDate && new Date(d.timestamp) <= periodEndDate
-            ).length;
-            if (achievedThisPeriod < target.target) {
-                penalties.bySales[salesName] += target.penalty;
-            }
+            let missedWeeks = 0;
+            sundaysInPeriod.forEach(sunday => {
+                const weekStart = getWeekStart(sunday);
+                const achievedThisWeek = (allData[target.dataKey] || []).filter(d => {
+                    const itemDate = new Date(d.timestamp);
+                    return d.sales === salesName && itemDate >= weekStart && itemDate <= sunday;
+                }).length;
+
+                if (achievedThisWeek < target.target) {
+                    missedWeeks++;
+                }
+            });
+            penalties.bySales[salesName] += missedWeeks * target.penalty;
         });
 
         // Cek Denda Bulanan
