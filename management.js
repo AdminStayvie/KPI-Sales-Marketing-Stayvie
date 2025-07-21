@@ -1,15 +1,15 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 1.9.0
+ * @version 2.0.0
  *
- * Perubahan Utama (v1.9.0):
- * - PENGHAPUSAN FITUR: Menghapus seluruh bagian "Visualisasi Kinerja Tim" (grafik batang dan donat) sesuai permintaan.
- * - FOKUS: Dashboard sekarang lebih fokus pada statistik utama, papan peringkat, dan laporan kinerja rinci.
+ * Perubahan Utama (v2.0.0):
+ * - KONSISTENSI FILTER: Filter tahun dan periode sekarang mengontrol SEMUA data yang ditampilkan di dashboard, termasuk Kartu Statistik dan Papan Peringkat. Ini memastikan semua komponen sinkron.
+ * - OPTIMISASI: Logika untuk mendapatkan tanggal mulai periode (getMonthStart) sekarang menerima parameter dari filter, membuatnya lebih fleksibel.
  *
  * Perubahan Sebelumnya:
+ * - PENGHAPUSAN FITUR: Menghapus bagian visualisasi grafik.
  * - FITUR UTAMA: Menambahkan "Laporan Kinerja Rinci" dengan tampilan tab dan kalender.
- * - PENGAMBILAN DATA: Siap menerima daftar semua pengguna dari server.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -104,8 +104,10 @@ async function loadInitialData(isInitialLoad = false) {
 }
 
 function updateAllUI() {
-    updateStatCards();
-    updateLeaderboard();
+    // <<< PERUBAHAN: Semua fungsi update sekarang menggunakan periode dari filter
+    const periodStartDate = getPeriodStartDate();
+    updateStatCards(periodStartDate);
+    updateLeaderboard(periodStartDate);
     renderTabbedTargetSummary();
 }
 
@@ -113,18 +115,17 @@ function updateAllUI() {
 // FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
 // =================================================================================
 
-function updateStatCards() {
-    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
-    const leadsThisMonth = (allData.leads || []).filter(d => new Date(d.timestamp) >= monthStart);
-    const canvasingThisMonth = (allData.canvasing || []).filter(d => new Date(d.timestamp) >= monthStart);
+function updateStatCards(periodStartDate) {
+    const leadsThisPeriod = (allData.leads || []).filter(d => new Date(d.timestamp) >= periodStartDate);
+    const canvasingThisPeriod = (allData.canvasing || []).filter(d => new Date(d.timestamp) >= periodStartDate);
     
-    document.getElementById('totalLeads').textContent = leadsThisMonth.length;
-    document.getElementById('totalCanvasing').textContent = canvasingThisMonth.length;
+    document.getElementById('totalLeads').textContent = leadsThisPeriod.length;
+    document.getElementById('totalCanvasing').textContent = canvasingThisPeriod.length;
 
     const salesPerformance = {};
     allSalesUsers.forEach(salesName => {
         salesPerformance[salesName] = TRACKED_ACTIVITY_KEYS.reduce((total, key) => 
-            total + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
+            total + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length, 0);
     });
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
@@ -132,26 +133,21 @@ function updateStatCards() {
     document.getElementById('totalPenalty').textContent = 'Rp 0';
 }
 
-function updateLeaderboard() {
+function updateLeaderboard(periodStartDate) {
     const container = document.getElementById('leaderboard');
     if (!container) return;
-    const monthStart = getMonthStart(new Date(selectedYear, selectedPeriod.split('-')[0], 21));
 
     const leaderboardData = allSalesUsers.map(salesName => {
-        const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length;
-        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= monthStart).length, 0);
+        const leads = (allData.leads || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
+        const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
+        const promosi = (allData.promosi || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length;
+        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName && new Date(d.timestamp) >= periodStartDate).length, 0);
         return { name: salesName, leads, canvasing, promosi, total };
     });
 
     leaderboardData.sort((a, b) => b.total - a.total);
     container.innerHTML = `<table><thead><tr><th>Nama Sales</th><th>Leads</th><th>Canvasing</th><th>Promosi</th><th>Total Aktivitas</th></tr></thead><tbody>${leaderboardData.map(s => `<tr><td>${s.name}</td><td>${s.leads}</td><td>${s.canvasing}</td><td>${s.promosi}</td><td><strong>${s.total}</strong></td></tr>`).join('')}</tbody></table>`;
 }
-
-// =================================================================================
-// <<< FUNGSI DIHAPUS: Semua fungsi terkait visualisasi grafik >>>
-// =================================================================================
 
 // =================================================================================
 // FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER)
@@ -170,11 +166,11 @@ function setupFilters() {
     yearFilter.addEventListener('change', (e) => {
         selectedYear = e.target.value;
         generatePeriodOptions();
-        renderTabbedTargetSummary();
+        updateAllUI(); // <<< PERUBAHAN: Panggil updateAllUI agar semua komponen di-refresh
     });
     periodFilter.addEventListener('change', (e) => {
         selectedPeriod = e.target.value;
-        renderTabbedTargetSummary();
+        updateAllUI(); // <<< PERUBAHAN: Panggil updateAllUI agar semua komponen di-refresh
     });
 }
 
@@ -251,7 +247,7 @@ function renderTabbedTargetSummary() {
                         const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = `<span class="progress-fraction">${achievedThisWeek}/${target.target}</span>`;
                     } else if (period === 'monthly' && date.getDate() === 20) {
-                        const monthStart = getMonthStart(date);
+                        const monthStart = getPeriodStartDate();
                         const achievedThisMonth = dataForTarget.filter(d => new Date(d.timestamp) >= monthStart).length;
                         cellContent = `<span class="progress-fraction">${achievedThisMonth}/${target.target}</span>`;
                     }
@@ -279,7 +275,24 @@ function renderTabbedTargetSummary() {
 // =================================================================================
 
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-function getMonthStart(date = new Date()) { const d = new Date(date); const day = d.getDate(); let m = d.getMonth(); let y = d.getFullYear(); if (day < 21) { m = (m - 1 + 12) % 12; if (m === 11) y--; } return new Date(y, m, 21); }
+
+// <<< PERUBAHAN: Fungsi ini sekarang menjadi pusat untuk mendapatkan tanggal mulai periode
+function getPeriodStartDate() {
+    if (!selectedYear || !selectedPeriod) {
+        const now = new Date();
+        const day = now.getDate();
+        let m = now.getMonth();
+        let y = now.getFullYear();
+        if (day < 21) {
+            m = (m - 1 + 12) % 12;
+            if (m === 11) y--;
+        }
+        return new Date(y, m, 21);
+    }
+    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
+    return new Date(selectedYear, startMonthIndex, 21);
+}
+
 function showMessage(message, type = 'info') { const el = document.querySelector('.message'); if(el) el.remove(); const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; document.querySelector('.main-content')?.insertBefore(n, document.querySelector('.main-content').firstChild); setTimeout(() => n.remove(), 4000); }
 function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
