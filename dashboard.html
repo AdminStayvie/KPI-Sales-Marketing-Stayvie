@@ -163,6 +163,11 @@
                         <div class="form-group"><label class="form-label">Sumber Lead</label><select name="leadSource" class="form-control" required><option value="">Pilih Sumber</option><option value="Cekat">Cekat</option><option value="Sosmed">Sosmed</option><option value="Walk-in">Walk-in</option><option value="Canvasing">Canvasing</option></select></div>
                         <div class="form-group"><label class="form-label">Produk yang Diminati</label><select name="product" class="form-control" required><option value="">Pilih Produk</option><option value="Kamar Hotel">Kamar Hotel</option><option value="Venue">Venue</option><option value="Co-Living">Co-Living</option><option value="Package">Package</option></select></div>
                         <div class="form-group"><label class="form-label">No Kontak (HP/Email)</label><input type="text" name="contact" class="form-control" required></div>
+                        <!-- PERUBAHAN: Menambahkan kolom isian "Bukti Lead" -->
+                        <div class="form-group">
+                            <label for="proofOfLead" class="form-label">Bukti Lead (Screenshot, dll)</label>
+                            <input type="file" id="proofOfLead" name="proofOfLead" class="form-control" accept="image/*">
+                        </div>
                         <div class="form-group"><label class="form-label">Catatan Awal</label><textarea name="notes" class="form-control" rows="3" placeholder="Contoh: cold/warm/hot"></textarea></div>
                         <button type="submit" class="btn btn--primary">Simpan Lead</button>
                     </form>
@@ -211,7 +216,6 @@
                         <!-- Opsi akan diisi oleh JavaScript -->
                     </select>
                 </div>
-                <!-- PERUBAHAN: Mengganti id, name, dan for dari 'updateNotes' menjadi 'statusLog' -->
                 <div class="form-group">
                     <label for="statusLog" class="form-label">Catatan Log Status</label>
                     <textarea id="statusLog" name="statusLog" class="form-control" rows="3" required></textarea>
