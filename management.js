@@ -1,15 +1,16 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.8.0
+ * @version 2.9.0
  *
- * Perubahan Utama (v2.8.0):
- * - RESTRUKTURISASI UI: Memisahkan "Pengaturan Hari Libur & Izin" ke halaman/tab sendiri yang dapat diakses melalui sidebar navigasi.
- * - NAVIGASI: Menambahkan fungsi `showContentPage` untuk menangani perpindahan antar halaman.
+ * Perubahan Utama (v2.9.0):
+ * - FITUR BARU: Implementasi penuh logika perhitungan denda di dashboard manajemen.
+ * - `calculatePenalties`: Fungsi baru untuk menghitung denda berdasarkan target yang tidak tercapai pada periode yang dipilih.
+ * - PENINGKATAN UI: Kartu "Total Denda Tim" dan tabel "Papan Peringkat" sekarang menampilkan total denda yang akurat sesuai dengan filter periode.
  *
  * Perubahan Sebelumnya:
+ * - RESTRUKTURISASI UI: Memisahkan "Pengaturan Hari Libur & Izin" ke halaman terpisah.
  * - FITUR BARU: Hari Minggu secara otomatis dianggap sebagai hari libur.
- * - PERBAIKAN BUG ZONA WAKTU: Memperbaiki fungsi `isDayOff`.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -36,21 +37,21 @@ const TRACKED_ACTIVITY_KEYS = [
 
 const TARGET_CONFIG = {
     daily: [
-        { id: 1, name: "Menginput Data Lead", target: 20, dataKey: 'leads', dateField: 'timestamp' },
-        { id: 3, name: "Promosi Campaign Package", target: 2, dataKey: 'promosi', dateField: 'timestamp' }
+        { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'timestamp' },
+        { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', dateField: 'timestamp' }
     ],
     weekly: [
-        { id: 4, name: "Canvasing dan Pitching", target: 1, dataKey: 'canvasing', dateField: 'timestamp' },
-        { id: 5, name: "Door-to-door perusahaan", target: 3, dataKey: 'doorToDoor', dateField: 'timestamp' },
-        { id: 6, name: "Menyampaikan Quotation", target: 1, dataKey: 'quotations', dateField: 'timestamp' },
-        { id: 7, name: "Survey pengunjung Co-living", target: 4, dataKey: 'surveys', dateField: 'timestamp' },
-        { id: 8, name: "Laporan Ringkas Mingguan", target: 1, dataKey: 'reports', dateField: 'timestamp' },
-        { id: 9, name: "Input CRM Survey kompetitor", target: 1, dataKey: 'crmSurveys', dateField: 'timestamp' },
-        { id: 10, name: "Konversi Booking Venue Barter", target: 1, dataKey: 'conversions', dateField: 'timestamp' }
+        { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing', dateField: 'timestamp' },
+        { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor', dateField: 'timestamp' },
+        { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations', dateField: 'timestamp' },
+        { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys', dateField: 'timestamp' },
+        { id: 8, name: "Laporan Ringkas Mingguan", target: 1, penalty: 50000, dataKey: 'reports', dateField: 'timestamp' },
+        { id: 9, name: "Input CRM Survey kompetitor", target: 1, penalty: 25000, dataKey: 'crmSurveys', dateField: 'timestamp' },
+        { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', dateField: 'timestamp' }
     ],
     monthly: [
-        { id: 13, name: "Mengikuti Event/Networking", target: 1, dataKey: 'events', dateField: 'timestamp' },
-        { id: 14, name: "Launch Campaign Package", target: 1, dataKey: 'campaigns', dateField: 'timestamp' }
+        { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'timestamp' },
+        { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' }
     ]
 };
 
@@ -112,8 +113,9 @@ async function loadInitialData(isInitialLoad = false) {
 function updateAllUI() {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
-    updateStatCards(periodStartDate, periodEndDate);
-    updateLeaderboard(periodStartDate, periodEndDate);
+    const penalties = calculatePenalties(periodStartDate, periodEndDate); // <<< HITUNG DENDA
+    updateStatCards(periodStartDate, periodEndDate, penalties); // <<< KIRIM DENDA
+    updateLeaderboard(periodStartDate, periodEndDate, penalties); // <<< KIRIM DENDA
     renderTabbedTargetSummary();
     renderTimeOffList();
 }
@@ -122,7 +124,7 @@ function updateAllUI() {
 // FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
 // =================================================================================
 
-function updateStatCards(periodStartDate, periodEndDate) {
+function updateStatCards(periodStartDate, periodEndDate, penalties) {
     const dateFilter = d => {
         const itemDate = new Date(d.timestamp);
         return itemDate >= periodStartDate && itemDate <= periodEndDate;
@@ -142,10 +144,10 @@ function updateStatCards(periodStartDate, periodEndDate) {
 
     const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
     document.getElementById('topSales').textContent = topSales;
-    document.getElementById('totalPenalty').textContent = 'Rp 0';
+    document.getElementById('totalPenalty').textContent = formatCurrency(penalties.total); // <<< TAMPILKAN DENDA
 }
 
-function updateLeaderboard(periodStartDate, periodEndDate) {
+function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
     const container = document.getElementById('leaderboard');
     if (!container) return;
 
@@ -161,7 +163,7 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
         });
         const total = Object.values(activities).reduce((sum, count) => sum + count, 0);
         
-        return { name: salesName, ...activities, total };
+        return { name: salesName, ...activities, total, penalty: penalties.bySales[salesName] || 0 };
     });
 
     leaderboardData.sort((a, b) => b.total - a.total);
@@ -172,42 +174,80 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
                 <thead>
                     <tr>
                         <th>Nama Sales</th>
-                        <th>Leads</th>
-                        <th>Canvasing</th>
-                        <th>Promosi</th>
-                        <th>D2D</th>
-                        <th>Quotes</th>
-                        <th>Surveys</th>
-                        <th>Reports</th>
-                        <th>CRM</th>
-                        <th>Konversi</th>
-                        <th>Events</th>
-                        <th>Campaigns</th>
-                        <th>Total</th>
+                        <th>Total Aktivitas</th>
+                        <th>Denda</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${leaderboardData.map(s => `
                         <tr>
                             <td>${s.name}</td>
-                            <td>${s.leads || 0}</td>
-                            <td>${s.canvasing || 0}</td>
-                            <td>${s.promosi || 0}</td>
-                            <td>${s.doorToDoor || 0}</td>
-                            <td>${s.quotations || 0}</td>
-                            <td>${s.surveys || 0}</td>
-                            <td>${s.reports || 0}</td>
-                            <td>${s.crmSurveys || 0}</td>
-                            <td>${s.conversions || 0}</td>
-                            <td>${s.events || 0}</td>
-                            <td>${s.campaigns || 0}</td>
                             <td><strong>${s.total}</strong></td>
+                            <td>${formatCurrency(s.penalty)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
         </div>`;
 }
+
+// =================================================================================
+// <<< FUNGSI BARU: LOGIKA PERHITUNGAN DENDA >>>
+// =================================================================================
+function calculatePenalties(periodStartDate, periodEndDate) {
+    const penalties = { total: 0, bySales: {} };
+    const today = new Date();
+
+    // Denda hanya dihitung jika periode yang dipilih sudah berlalu
+    if (periodEndDate > today) {
+        return penalties;
+    }
+
+    allSalesUsers.forEach(salesName => {
+        penalties.bySales[salesName] = 0;
+        const periodDates = getDatesForPeriod();
+
+        // Cek Denda Harian
+        TARGET_CONFIG.daily.forEach(target => {
+            let missedDays = 0;
+            periodDates.forEach(date => {
+                if (!isDayOff(date, salesName)) {
+                    const achievedToday = (allData[target.dataKey] || []).filter(d => 
+                        d.sales === salesName && new Date(d.timestamp).toDateString() === date.toDateString()
+                    ).length;
+                    if (achievedToday < target.target) {
+                        missedDays++;
+                    }
+                }
+            });
+            penalties.bySales[salesName] += missedDays * target.penalty;
+        });
+
+        // Cek Denda Mingguan
+        TARGET_CONFIG.weekly.forEach(target => {
+            const achievedThisPeriod = (allData[target.dataKey] || []).filter(d => 
+                d.sales === salesName && new Date(d.timestamp) >= periodStartDate && new Date(d.timestamp) <= periodEndDate
+            ).length;
+            if (achievedThisPeriod < target.target) {
+                penalties.bySales[salesName] += target.penalty;
+            }
+        });
+
+        // Cek Denda Bulanan
+        TARGET_CONFIG.monthly.forEach(target => {
+            const achievedThisPeriod = (allData[target.dataKey] || []).filter(d => 
+                d.sales === salesName && new Date(d.timestamp) >= periodStartDate && new Date(d.timestamp) <= periodEndDate
+            ).length;
+            if (achievedThisPeriod < target.target) {
+                penalties.bySales[salesName] += target.penalty;
+            }
+        });
+    });
+
+    penalties.total = Object.values(penalties.bySales).reduce((sum, p) => sum + p, 0);
+    return penalties;
+}
+
 
 // =================================================================================
 // FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER)
@@ -445,7 +485,6 @@ function renderTimeOffList() {
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
 
-// <<< BARU: Fungsi untuk navigasi antar halaman
 function showContentPage(pageId) {
     document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
     document.getElementById(pageId)?.classList.add('active');
@@ -460,6 +499,7 @@ function toLocalDateString(date) {
     return `${year}-${month}-${day}`;
 }
 
+function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
 function getPeriodStartDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex] = selectedPeriod.split('-').map(Number); return new Date(selectedYear, startMonthIndex, 21); }
 function getPeriodEndDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number); const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear; const endDate = new Date(endYear, endMonthIndex, 20); endDate.setHours(23, 59, 59, 999); return endDate; }
@@ -473,7 +513,6 @@ function initializeApp() {
     updateDateTime();
     setInterval(updateDateTime, 60000);
     
-    // <<< BARU: Setup event listener untuk navigasi sidebar
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
