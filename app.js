@@ -1,15 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.6.0
+ * @version 3.7.0
  *
- * Perubahan Utama (v3.6.0):
- * - BUG FIX: Memperbaiki logika format tanggal di modal detail yang menyebabkan "Invalid Date" pada beberapa field.
- * - BUG FIX: Memastikan semua baris di semua tabel rekap dapat diklik untuk membuka modal detail, bahkan jika baris tersebut berisi link.
+ * Perubahan Utama (v3.7.0):
+ * - REFACTOR: Mengganti nama variabel 'updateNotes' menjadi 'statusLog' untuk menghindari konflik dengan logika pemformatan tanggal dan membuat nama lebih deskriptif.
  *
  * Perubahan Sebelumnya:
+ * - BUG FIX: Memperbaiki logika format tanggal di modal detail.
+ * - BUG FIX: Memastikan semua baris di semua tabel rekap dapat diklik.
  * - FITUR: Menambahkan modal detail generik untuk semua data rekap.
- * - BUG FIX: Tabel rekap "Semua Data Leads" sekarang merespons filter periode.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -55,7 +55,7 @@ const CONFIG = {
             detailLabels: {
                 timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
                 product: 'Produk', contact: 'Kontak', notes: 'Catatan Awal', status: 'Status',
-                updateNotes: 'Catatan Update'
+                statusLog: 'Log Status' // PERUBAHAN: dari updateNotes
             }
         },
         'Canvasing': { 
@@ -211,7 +211,7 @@ function handleFormSubmit(e) {
     data.datestamp = getDatestamp();
     if (sheetName === 'Leads') {
         data.status = 'Lead';
-        data.updateNotes = '';
+        data.statusLog = ''; // PERUBAHAN: dari updateNotes
     }
 
     const payload = { sheetName, data };
@@ -223,7 +223,7 @@ function handleUpdateLead(e) {
     const form = e.target;
     const leadId = form.querySelector('#updateLeadId').value;
     const newStatus = form.querySelector('#updateStatus').value;
-    const updateNotes = form.querySelector('#updateNotes').value;
+    const statusLog = form.querySelector('#updateNotes').value; // PERUBAHAN: dari updateNotes
 
     const leadData = currentData.leads.find(lead => lead.id === leadId);
     if (!leadData) {
@@ -234,7 +234,7 @@ function handleUpdateLead(e) {
     const payload = {
         leadId,
         newStatus,
-        updateNotes,
+        statusLog, // PERUBAHAN: dari updateNotes
         leadData
     };
 
@@ -451,7 +451,6 @@ function openDetailModal(dataKey, itemId) {
     const detailList = document.createElement('dl');
     detailList.className = 'detail-list';
 
-    // PERBAIKAN: Daftar field yang secara eksplisit dianggap sebagai tanggal
     const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
 
     for (const key in mapping.detailLabels) {
@@ -462,7 +461,6 @@ function openDetailModal(dataKey, itemId) {
             const dd = document.createElement('dd');
             let value = item[key];
 
-            // PERBAIKAN: Logika format yang lebih spesifik
             if (dateFields.includes(key)) {
                 value = formatDate(value);
             } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
