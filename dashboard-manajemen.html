@@ -15,8 +15,6 @@
         .stat-card .value { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary); }
         .dashboard-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-24); }
         
-        /* <<< CSS DIHAPUS: CSS untuk grafik yang tidak lagi digunakan >>> */
-
         /* <<< CSS BARU UNTUK LAPORAN KINERJA INTERAKTIF >>> */
         .performance-report-container .filters { display: flex; gap: var(--space-16); margin-bottom: var(--space-16); align-items: center; }
         .tabs-container { display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-16); }
@@ -32,6 +30,14 @@
         .check-mark { color: var(--color-success); font-weight: bold; }
         .cross-mark { color: var(--color-error); font-weight: bold; }
         .progress-fraction { font-weight: bold; }
+        .off-day { background-color: var(--color-gray-300) !important; color: var(--color-text-secondary); }
+        
+        /* <<< CSS BARU UNTUK PENGATURAN HARI LIBUR >>> */
+        .time-off-container { display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-24); }
+        .time-off-form { display: flex; flex-direction: column; gap: var(--space-16); }
+        .time-off-list ul { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+        .time-off-list li { display: flex; justify-content: space-between; align-items: center; padding: var(--space-8); border-bottom: 1px solid var(--color-border); }
+        .delete-btn { background: none; border: none; color: var(--color-error); cursor: pointer; }
     </style>
 </head>
 <body>
@@ -58,7 +64,31 @@
             <div class="dashboard-layout">
                 <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
                 
-                <!-- <<< BAGIAN DIHAPUS: Visualisasi Kinerja Tim (Grafik) >>> -->
+                <!-- <<< HALAMAN BARU: Pengaturan Hari Libur & Izin >>> -->
+                <div class="card">
+                    <div class="card__header"><h3>Pengaturan Hari Libur & Izin</h3></div>
+                    <div class="card__body">
+                        <div class="time-off-container">
+                            <form id="timeOffForm" class="time-off-form">
+                                <div class="form-group">
+                                    <label for="timeOffDate" class="form-label">Tanggal</label>
+                                    <input type="date" id="timeOffDate" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="timeOffSales" class="form-label">Untuk Sales</label>
+                                    <select id="timeOffSales" class="form-control" required></select>
+                                </div>
+                                <button type="submit" class="btn btn--primary">Simpan</button>
+                            </form>
+                            <div class="time-off-list">
+                                <h4>Daftar Tanggal Tersimpan</h4>
+                                <ul id="timeOffListContainer">
+                                    <!-- Daftar akan di-generate oleh JS -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Laporan Kinerja Rinci per Sales -->
                 <div class="card">
