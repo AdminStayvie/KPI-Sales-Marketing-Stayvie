@@ -1,15 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.7.0
+ * @version 3.8.0
  *
- * Perubahan Utama (v3.7.0):
- * - REFACTOR: Mengganti nama variabel 'updateNotes' menjadi 'statusLog' untuk menghindari konflik dengan logika pemformatan tanggal dan membuat nama lebih deskriptif.
+ * Perubahan Utama (v3.8.0):
+ * - BUG FIX: Menghapus link aktif dari dalam tabel rekap untuk mencegah konflik event klik. Link sekarang hanya bisa diakses melalui modal detail.
+ * - UX: Mengganti tampilan link di tabel dengan teks indikator seperti "Ada File" atau "Ada Link".
  *
  * Perubahan Sebelumnya:
+ * - REFACTOR: Mengganti nama variabel 'updateNotes' menjadi 'statusLog'.
  * - BUG FIX: Memperbaiki logika format tanggal di modal detail.
- * - BUG FIX: Memastikan semua baris di semua tabel rekap dapat diklik.
- * - FITUR: Menambahkan modal detail generik untuk semua data rekap.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -55,13 +55,14 @@ const CONFIG = {
             detailLabels: {
                 timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
                 product: 'Produk', contact: 'Kontak', notes: 'Catatan Awal', status: 'Status',
-                statusLog: 'Log Status' // PERUBAHAN: dari updateNotes
+                statusLog: 'Log Status'
             }
         },
         'Canvasing': { 
             dataKey: 'canvasing', 
             headers: ['Waktu', 'Judul Meeting', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank" onclick="event.stopPropagation()">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`,
+            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? 'Ada File' : 'N/A'}</td></tr>`,
             detailLabels: {
                 datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', fileUrl: 'File', notes: 'Catatan'
             }
@@ -95,13 +96,15 @@ const CONFIG = {
         'Reports': { 
             dataKey: 'reports', 
             headers: ['Waktu', 'Periode', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank" onclick="event.stopPropagation()">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`, 
+            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? 'Ada File' : 'N/A'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } 
         },
         'CRMSurveys': { 
             dataKey: 'crmSurveys', 
             headers: ['Waktu', 'Kompetitor', 'Website'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank" onclick="event.stopPropagation()">Link</a>` : '-'}</td></tr>`, 
+            // PERUBAHAN: Menghapus tag <a> dan menggantinya dengan teks
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, 
             detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } 
         },
         'Conversions': { 
@@ -211,7 +214,7 @@ function handleFormSubmit(e) {
     data.datestamp = getDatestamp();
     if (sheetName === 'Leads') {
         data.status = 'Lead';
-        data.statusLog = ''; // PERUBAHAN: dari updateNotes
+        data.statusLog = '';
     }
 
     const payload = { sheetName, data };
@@ -223,7 +226,7 @@ function handleUpdateLead(e) {
     const form = e.target;
     const leadId = form.querySelector('#updateLeadId').value;
     const newStatus = form.querySelector('#updateStatus').value;
-    const statusLog = form.querySelector('#updateNotes').value; // PERUBAHAN: dari updateNotes
+    const statusLog = form.querySelector('#statusLog').value; 
 
     const leadData = currentData.leads.find(lead => lead.id === leadId);
     if (!leadData) {
@@ -234,7 +237,7 @@ function handleUpdateLead(e) {
     const payload = {
         leadId,
         newStatus,
-        statusLog, // PERUBAHAN: dari updateNotes
+        statusLog,
         leadData
     };
 
