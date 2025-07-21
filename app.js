@@ -1,16 +1,15 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.4.0
+ * @version 3.5.0
  *
- * Perubahan Utama (v3.4.0):
- * - BUG FIX: Tabel rekap "Semua Data Leads" sekarang merespons filter periode.
- * - BUG FIX: Memperbaiki format baris tabel (rowGenerator) untuk semua rekap data (Canvasing, Campaign, dll.) agar tidak merusak layout tabel.
+ * Perubahan Utama (v3.5.0):
+ * - FITUR: Setiap baris di tabel rekap sekarang dapat diklik untuk menampilkan modal dengan informasi detail.
+ * - FITUR: Menambahkan modal detail generik yang kontennya dibuat secara dinamis.
  *
  * Perubahan Sebelumnya:
- * - FITUR: Tombol "Update" pada data lead sekarang akan selalu muncul selama statusnya bukan 'Lost'.
- * - FITUR: Opsi pada modal update status sekarang dinamis.
- * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
+ * - BUG FIX: Tabel rekap "Semua Data Leads" sekarang merespons filter periode.
+ * - BUG FIX: Memperbaiki format baris tabel (rowGenerator).
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -49,21 +48,41 @@ const CONFIG = {
         ]
     },
     dataMapping: {
-        'Leads': { dataKey: 'leads', headers: ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'], rowGenerator: generateLeadRow },
-        'Prospects': { dataKey: 'prospects' },
-        'B2BBookings': { dataKey: 'b2bBookings' },
-        'VenueBookings': { dataKey: 'venueBookings' },
-        // PERBAIKAN: Menambahkan <tr> di semua rowGenerator
-        'Canvasing': { dataKey: 'canvasing', headers: ['Waktu', 'Judul Meeting', 'File'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>` },
-        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>` },
-        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>` },
-        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>` },
-        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>` },
-        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>` },
-        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td></tr>` },
-        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>` },
-        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>` },
-        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: item => `<tr><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>` },
+        'Leads': { 
+            dataKey: 'leads', 
+            headers: ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'], 
+            rowGenerator: generateLeadRow,
+            detailLabels: {
+                datestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
+                product: 'Produk', contact: 'Kontak', notes: 'Catatan Awal', status: 'Status',
+                updateNotes: 'Catatan Update'
+            }
+        },
+        'Canvasing': { 
+            dataKey: 'canvasing', 
+            headers: ['Waktu', 'Judul Meeting', 'File'], 
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`,
+            detailLabels: {
+                datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', fileUrl: 'File', notes: 'Catatan'
+            }
+        },
+        'Promosi': { 
+            dataKey: 'promosi', 
+            headers: ['Waktu', 'Campaign', 'Platform'], 
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>`,
+            detailLabels: {
+                datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot'
+            }
+        },
+        // ... (dan seterusnya untuk semua dataMapping)
+        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti' } },
+        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan' } },
+        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi' } },
+        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank">${item.fileName || 'Lihat File'}</a>` : 'N/A'}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } },
+        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? `<a href="${item.website}" target="_blank">Link</a>` : '-'}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } },
+        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan' } },
+        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi' } },
+        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } },
     }
 };
 
@@ -147,12 +166,14 @@ function handleFormSubmit(e) {
 
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-    data.id = `lead_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    data.id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     data.sales = currentUser.name;
     data.timestamp = getLocalTimestampString();
     data.datestamp = getDatestamp();
-    data.status = 'Lead';
-    data.updateNotes = '';
+    if (sheetName === 'Leads') {
+        data.status = 'Lead';
+        data.updateNotes = '';
+    }
 
     const payload = { sheetName, data };
     sendData('saveData', payload, e);
@@ -301,8 +322,9 @@ function updateProgressBar(type, achieved, total) {
 
 function updateAllSummaries(periodStartDate, periodEndDate) {
     for (const sheetName in CONFIG.dataMapping) {
-        if (CONFIG.dataMapping[sheetName].headers) {
-            updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName], periodStartDate, periodEndDate);
+        const mapping = CONFIG.dataMapping[sheetName];
+        if (mapping.headers) {
+            updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate);
         }
     }
 }
@@ -312,7 +334,6 @@ function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) 
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    // PERBAIKAN: Hapus kondisi khusus untuk 'Leads', sehingga semua tabel difilter.
     const dataToDisplay = getFilteredData(mapping.dataKey, periodStartDate, periodEndDate);
 
     if (dataToDisplay.length === 0) {
@@ -320,16 +341,16 @@ function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) 
         return;
     }
 
-    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => mapping.rowGenerator(item)).join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => mapping.rowGenerator(item, mapping.dataKey)).join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
-function generateLeadRow(item) {
+function generateLeadRow(item, dataKey) {
     const statusClass = item.status ? item.status.toLowerCase().replace(/\s+/g, '-') : 'lead';
     const updateButton = (item.status || 'Lead') !== 'Lost'
-        ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}')">Update</button>`
+        ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`
         : '-';
-    return `<tr><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'Lead'}</span></td><td>${updateButton}</td></tr>`;
+    return `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'Lead'}</span></td><td>${updateButton}</td></tr>`;
 }
 
 // =================================================================================
@@ -348,26 +369,16 @@ function openUpdateModal(leadId) {
 
     const currentStatus = lead.status || 'Lead';
     document.getElementById('modalCurrentStatus').textContent = currentStatus;
-    // Menyesuaikan class untuk styling status
     const statusElement = document.getElementById('modalCurrentStatus');
     statusElement.className = `status status--${currentStatus.toLowerCase().replace(/\s+/g, '-')}`;
-    statusElement.style.paddingLeft = '0'; // Override style jika perlu
+    statusElement.style.paddingLeft = '0';
 
     if (currentStatus === 'Lead') {
-        statusSelect.innerHTML = `
-            <option value="Prospect">Prospect</option>
-            <option value="Deal">Deal</option>
-            <option value="Lost">Lost</option>
-        `;
+        statusSelect.innerHTML = `<option value="Prospect">Prospect</option><option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     } else if (currentStatus === 'Prospect') {
-        statusSelect.innerHTML = `
-            <option value="Deal">Deal</option>
-            <option value="Lost">Lost</option>
-        `;
+        statusSelect.innerHTML = `<option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     } else if (currentStatus === 'Deal') {
-        statusSelect.innerHTML = `
-            <option value="Lost">Lost</option>
-        `;
+        statusSelect.innerHTML = `<option value="Lost">Lost</option>`;
     }
 
     modal.classList.add('active');
@@ -380,6 +391,64 @@ function closeModal() {
         document.getElementById('updateLeadForm').reset();
     }
 }
+
+// --- FUNGSI BARU UNTUK MODAL DETAIL ---
+function openDetailModal(dataKey, itemId) {
+    const mapping = Object.values(CONFIG.dataMapping).find(m => m.dataKey === dataKey);
+    const item = currentData[dataKey]?.find(d => d.id === itemId);
+
+    if (!item || !mapping) {
+        console.error("Data atau mapping tidak ditemukan:", dataKey, itemId);
+        return;
+    }
+
+    const modal = document.getElementById('detailModal');
+    const modalTitle = document.getElementById('detailModalTitle');
+    const modalBody = document.getElementById('detailModalBody');
+    
+    modalTitle.textContent = `Detail ${mapping.headers[1] || 'Data'}`; // Ambil judul dari header kedua
+    modalBody.innerHTML = ''; // Kosongkan konten sebelumnya
+
+    const detailList = document.createElement('dl');
+    detailList.className = 'detail-list';
+
+    for (const key in mapping.detailLabels) {
+        if (Object.prototype.hasOwnProperty.call(item, key) && item[key]) {
+            const dt = document.createElement('dt');
+            dt.textContent = mapping.detailLabels[key];
+            
+            const dd = document.createElement('dd');
+            let value = item[key];
+
+            // Format nilai berdasarkan kunci
+            if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
+                value = formatCurrency(value);
+            } else if (key.toLowerCase().includes('date')) {
+                value = formatDate(value);
+            } else if (key.toLowerCase().includes('url') || key.toLowerCase().includes('website') || key.toLowerCase().includes('doc') || key.toLowerCase().includes('file') || key.toLowerCase().includes('screenshot') || key.toLowerCase().includes('proof') || key.toLowerCase().includes('material')) {
+                dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
+                detailList.appendChild(dt);
+                detailList.appendChild(dd);
+                continue;
+            }
+            
+            dd.textContent = value;
+            detailList.appendChild(dt);
+            detailList.appendChild(dd);
+        }
+    }
+    
+    modalBody.appendChild(detailList);
+    modal.classList.add('active');
+}
+
+function closeDetailModal() {
+    const modal = document.getElementById('detailModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
 
 // =================================================================================
 // FUNGSI UTILITY & INISIALISASI
