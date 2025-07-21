@@ -1,14 +1,16 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.4.0
+ * @version 2.5.0
  *
- * Perubahan Utama (v2.4.0):
- * - PENINGKATAN LEADERBOARD: Papan Peringkat Sales sekarang menampilkan rincian untuk SEMUA kategori aktivitas yang dilacak, memberikan gambaran paling lengkap.
+ * Perubahan Utama (v2.5.0):
+ * - FITUR BARU: Menambahkan tab "Pengaturan Hari Libur & Izin" untuk manajemen.
+ * - Fungsionalitas: Manajemen dapat menginput tanggal libur (global) atau izin/sakit (per sales).
+ * - EFEK LAPORAN: Tanggal yang diinput sebagai libur/izin akan memblokir target harian di Laporan Kinerja Rinci, menandakannya sebagai hari non-kerja dan tidak dihitung dalam denda.
  *
  * Perubahan Sebelumnya:
- * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci menampilkan ✓ atau ✗ untuk semua jenis target.
- * - PERBAIKAN BUG KRITIS: Filter sekarang menggunakan rentang tanggal lengkap (mulai DAN akhir).
+ * - PENINGKATAN LEADERBOARD: Menampilkan rincian untuk semua kategori.
+ * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci menampilkan ✓ atau ✗.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -86,11 +88,17 @@ async function loadInitialData(isInitialLoad = false) {
                     allSalesUsers = Array.from(salesFromActivities);
                 }
                 
-                if (isInitialLoad) setupFilters();
+                if (isInitialLoad) {
+                    setupFilters();
+                    setupTimeOffForm();
+                }
                 updateAllUI();
                 if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
             } else if (isInitialLoad) {
-                if (isInitialLoad) setupFilters();
+                if (isInitialLoad) {
+                    setupFilters();
+                    setupTimeOffForm();
+                }
                 updateAllUI();
                 showMessage("Data berhasil dimuat.", "success");
             }
@@ -108,6 +116,7 @@ function updateAllUI() {
     updateStatCards(periodStartDate, periodEndDate);
     updateLeaderboard(periodStartDate, periodEndDate);
     renderTabbedTargetSummary();
+    renderTimeOffList();
 }
 
 // =================================================================================
@@ -158,7 +167,6 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
 
     leaderboardData.sort((a, b) => b.total - a.total);
     
-    // <<< PERUBAHAN: Menambahkan semua kolom aktivitas ke tabel
     container.innerHTML = `
         <div class="performance-table-wrapper">
             <table class="performance-table" style="table-layout: auto;">
@@ -172,8 +180,8 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
                         <th>Quotes</th>
                         <th>Surveys</th>
                         <th>Reports</th>
-                        <th>CRM Kompetitor</th>
-                        <th>Event Barter</th>
+                        <th>CRM</th>
+                        <th>Konversi</th>
                         <th>Events</th>
                         <th>Campaigns</th>
                         <th>Total</th>
@@ -251,7 +259,6 @@ function generatePeriodOptions() {
 function getDatesForPeriod() {
     const startDate = getPeriodStartDate();
     const endDate = getPeriodEndDate();
-    
     const dates = [];
     let currentDate = new Date(startDate);
     while (currentDate <= endDate) {
@@ -259,6 +266,13 @@ function getDatesForPeriod() {
         currentDate.setDate(currentDate.getDate() + 1);
     }
     return dates;
+}
+
+function isDayOff(date, salesName) {
+    const dateString = date.toISOString().split('T')[0];
+    return (allData.timeOff || []).some(off => 
+        off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
+    );
 }
 
 function renderTabbedTargetSummary() {
@@ -288,10 +302,16 @@ function renderTabbedTargetSummary() {
 
                 periodDates.forEach(date => {
                     let cellContent = '';
+                    let cellClass = '';
+
                     if (period === 'daily') {
-                        const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
-                        cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'weekly' && date.getDay() === 0) { // Minggu
+                        if (isDayOff(date, salesName)) {
+                            cellClass = 'off-day';
+                        } else {
+                            const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                            cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
+                        }
+                    } else if (period === 'weekly' && date.getDay() === 0) {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
@@ -299,7 +319,7 @@ function renderTabbedTargetSummary() {
                         const achievedThisMonth = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
                         cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
-                    tableBody += `<td>${cellContent}</td>`;
+                    tableBody += `<td class="${cellClass}">${cellContent}</td>`;
                 });
                 tableBody += '</tr>';
             });
@@ -319,26 +339,111 @@ function renderTabbedTargetSummary() {
 }
 
 // =================================================================================
+// <<< FUNGSI BARU: PENGATURAN HARI LIBUR & IZIN >>>
+// =================================================================================
+
+function setupTimeOffForm() {
+    const form = document.getElementById('timeOffForm');
+    const salesSelect = document.getElementById('timeOffSales');
+    
+    // Populate dropdown
+    salesSelect.innerHTML = '<option value="Global">Global (Hari Libur)</option>';
+    allSalesUsers.forEach(name => {
+        salesSelect.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date = document.getElementById('timeOffDate').value;
+        const sales = salesSelect.value;
+        
+        if (!date) {
+            showMessage('Silakan pilih tanggal.', 'error');
+            return;
+        }
+
+        const payload = { action: 'saveTimeOff', data: { date, sales } };
+        
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Menyimpan...';
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                showMessage('Data berhasil disimpan.', 'success');
+                if (!allData.timeOff) allData.timeOff = [];
+                allData.timeOff.push(result.data);
+                updateAllUI();
+                form.reset();
+            } else {
+                throw new Error(result.message || 'Gagal menyimpan data.');
+            }
+        } catch (error) {
+            showMessage(`Error: ${error.message}`, 'error');
+        } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Simpan';
+        }
+    });
+}
+
+function renderTimeOffList() {
+    const container = document.getElementById('timeOffListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    (allData.timeOff || []).forEach(item => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <span>${item.date} - <strong>${item.sales}</strong></span>
+            <button class="delete-btn" data-id="${item.id}">&times;</button>
+        `;
+        container.appendChild(li);
+    });
+
+    // Add event listeners for delete buttons
+    container.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const id = e.target.dataset.id;
+            if (confirm('Anda yakin ingin menghapus data ini?')) {
+                const payload = { action: 'deleteTimeOff', id };
+                try {
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        showMessage('Data berhasil dihapus.', 'success');
+                        allData.timeOff = allData.timeOff.filter(item => item.id != id);
+                        updateAllUI();
+                    } else {
+                        throw new Error(result.message || 'Gagal menghapus data.');
+                    }
+                } catch (error) {
+                    showMessage(`Error: ${error.message}`, 'error');
+                }
+            }
+        });
+    });
+}
+
+// =================================================================================
 // FUNGSI UTILITY & INISIALISASI
 // =================================================================================
 
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-
-function getPeriodStartDate() {
-    if (!selectedYear || !selectedPeriod) return new Date(); // Fallback
-    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
-    return new Date(selectedYear, startMonthIndex, 21);
-}
-
-function getPeriodEndDate() {
-    if (!selectedYear || !selectedPeriod) return new Date(); // Fallback
-    const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
-    const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear;
-    const endDate = new Date(endYear, endMonthIndex, 20);
-    endDate.setHours(23, 59, 59, 999); // Set ke akhir hari
-    return endDate;
-}
-
+function getPeriodStartDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex] = selectedPeriod.split('-').map(Number); return new Date(selectedYear, startMonthIndex, 21); }
+function getPeriodEndDate() { if (!selectedYear || !selectedPeriod) return new Date(); const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number); const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear; const endDate = new Date(endYear, endMonthIndex, 20); endDate.setHours(23, 59, 59, 999); return endDate; }
 function showMessage(message, type = 'info') { const el = document.querySelector('.message'); if(el) el.remove(); const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; document.querySelector('.main-content')?.insertBefore(n, document.querySelector('.main-content').firstChild); setTimeout(() => n.remove(), 4000); }
 function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
