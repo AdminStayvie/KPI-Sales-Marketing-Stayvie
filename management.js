@@ -1,15 +1,14 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.1.0
+ * @version 2.2.0
  *
- * Perubahan Utama (v2.1.0):
- * - PERBAIKAN BUG KRITIS: Filter sekarang menggunakan rentang tanggal lengkap (mulai DAN akhir) untuk Kartu Statistik dan Papan Peringkat. Ini memperbaiki bug di mana data dari bulan mendatang ikut terhitung.
- * - KONSISTENSI DATA: Semua komponen di dashboard sekarang sepenuhnya sinkron dengan filter periode yang dipilih.
+ * Perubahan Utama (v2.2.0):
+ * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci sekarang menampilkan indikator ✓ (tercapai) atau ✗ (tidak tercapai) untuk SEMUA jenis target (harian, mingguan, bulanan) agar lebih seragam dan mudah dibaca.
  *
  * Perubahan Sebelumnya:
- * - KONSISTENSI FILTER: Filter tahun dan periode mengontrol semua komponen.
- * - FITUR UTAMA: Menambahkan "Laporan Kinerja Rinci" dengan tampilan tab dan kalender.
+ * - PERBAIKAN BUG KRITIS: Filter sekarang menggunakan rentang tanggal lengkap (mulai DAN akhir).
+ * - KONSISTENSI DATA: Semua komponen di dashboard sekarang sepenuhnya sinkron dengan filter periode.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -105,9 +104,9 @@ async function loadInitialData(isInitialLoad = false) {
 
 function updateAllUI() {
     const periodStartDate = getPeriodStartDate();
-    const periodEndDate = getPeriodEndDate(); // <<< BARU: Dapatkan tanggal akhir
-    updateStatCards(periodStartDate, periodEndDate); // <<< PERUBAHAN: Kirim tanggal akhir
-    updateLeaderboard(periodStartDate, periodEndDate); // <<< PERUBAHAN: Kirim tanggal akhir
+    const periodEndDate = getPeriodEndDate();
+    updateStatCards(periodStartDate, periodEndDate);
+    updateLeaderboard(periodStartDate, periodEndDate);
     renderTabbedTargetSummary();
 }
 
@@ -115,7 +114,7 @@ function updateAllUI() {
 // FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
 // =================================================================================
 
-function updateStatCards(periodStartDate, periodEndDate) { // <<< PERUBAHAN: Terima tanggal akhir
+function updateStatCards(periodStartDate, periodEndDate) {
     const dateFilter = d => {
         const itemDate = new Date(d.timestamp);
         return itemDate >= periodStartDate && itemDate <= periodEndDate;
@@ -138,7 +137,7 @@ function updateStatCards(periodStartDate, periodEndDate) { // <<< PERUBAHAN: Ter
     document.getElementById('totalPenalty').textContent = 'Rp 0';
 }
 
-function updateLeaderboard(periodStartDate, periodEndDate) { // <<< PERUBAHAN: Terima tanggal akhir
+function updateLeaderboard(periodStartDate, periodEndDate) {
     const container = document.getElementById('leaderboard');
     if (!container) return;
 
@@ -248,13 +247,13 @@ function renderTabbedTargetSummary() {
                     if (period === 'daily') {
                         const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
                         cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'weekly' && date.getDay() === 0) {
+                    } else if (period === 'weekly' && date.getDay() === 0) { // Minggu
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
-                        cellContent = `<span class="progress-fraction">${achievedThisWeek}/${target.target}</span>`;
+                        cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     } else if (period === 'monthly' && date.getDate() === 20) {
                         const achievedThisMonth = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
-                        cellContent = `<span class="progress-fraction">${achievedThisMonth}/${target.target}</span>`;
+                        cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
                     tableBody += `<td>${cellContent}</td>`;
                 });
@@ -287,7 +286,6 @@ function getPeriodStartDate() {
     return new Date(selectedYear, startMonthIndex, 21);
 }
 
-// <<< BARU: Fungsi untuk mendapatkan tanggal akhir periode
 function getPeriodEndDate() {
     if (!selectedYear || !selectedPeriod) return new Date(); // Fallback
     const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
