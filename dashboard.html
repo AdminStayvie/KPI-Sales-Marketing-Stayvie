@@ -154,9 +154,26 @@
                 <div class="card target-details"><div class="card__body"><h3>Detail Target</h3><div id="targetBreakdown"></div></div></div>
             </div>
 
-            <!-- Halaman Input -->
-            <div id="input-lead" class="content-page">...</div>
-            <!-- Semua halaman input lainnya ada di sini -->
+            <!-- Input Lead Page -->
+            <div id="input-lead" class="content-page">
+                <div class="page-header"><h2>Input Lead</h2></div>
+                <div class="form-container">
+                    <form id="leadForm" class="kpi-form" data-sheet-name="Leads">
+                        <div class="form-group"><label class="form-label">Nama Customer / Perusahaan</label><input type="text" name="customerName" class="form-control" required></div>
+                        <div class="form-group"><label class="form-label">Sumber Lead</label><select name="leadSource" class="form-control" required><option value="">Pilih Sumber</option><option value="Cekat">Cekat</option><option value="Sosmed">Sosmed</option><option value="Walk-in">Walk-in</option><option value="Canvasing">Canvasing</option></select></div>
+                        <div class="form-group"><label class="form-label">Produk yang Diminati</label><select name="product" class="form-control" required><option value="">Pilih Produk</option><option value="Kamar Hotel">Kamar Hotel</option><option value="Venue">Venue</option><option value="Co-Living">Co-Living</option><option value="Package">Package</option></select></div>
+                        <div class="form-group"><label class="form-label">No Kontak (HP/Email)</label><input type="text" name="contact" class="form-control" required></div>
+                        <div class="form-group"><label class="form-label">Catatan Awal</label><textarea name="notes" class="form-control" rows="3" placeholder="Contoh: cold/warm/hot"></textarea></div>
+                        <button type="submit" class="btn btn--primary">Simpan Lead</button>
+                    </form>
+                </div>
+                <div class="data-summary">
+                    <h3>Semua Data Leads</h3>
+                    <div id="leadsSummary" class="summary-table"></div>
+                </div>
+            </div>
+
+            <!-- Halaman Input Lainnya -->
             <div id="upload-canvasing" class="content-page"><div class="page-header"><h2>Upload Meeting Canvasing & Pitching</h2></div><div class="form-container"><form id="canvasingForm" class="kpi-form" data-sheet-name="Canvasing"><div class="form-group"><label class="form-label">Judul Meeting</label><input type="text" name="meetingTitle" class="form-control" required></div><div class="form-group"><label class="form-label">File PPT/Dokumen</label><input type="file" name="document" class="form-control" accept=".ppt,.pptx,.pdf"></div><div class="form-group"><label class="form-label">Catatan</label><textarea name="notes" class="form-control" rows="3"></textarea></div><button type="submit" class="btn btn--primary">Upload</button></form></div><div class="data-summary"><h3>Riwayat Upload Canvasing</h3><div id="canvasingSummary" class="summary-table"></div></div></div>
             <div id="upload-promosi" class="content-page"><div class="page-header"><h2>Upload Promosi Campaign Package</h2></div><div class="form-container"><form id="promosiForm" class="kpi-form" data-sheet-name="Promosi"><div class="form-group"><label class="form-label">Nama Campaign</label><input type="text" name="campaignName" class="form-control" required></div><div class="form-group"><label class="form-label">Screenshot Promosi</label><input type="file" name="screenshot" class="form-control" accept="image/*"></div><div class="form-group"><label class="form-label">Platform</label><select name="platform" class="form-control" required><option value="">Pilih Platform</option><option value="Instagram">Instagram</option><option value="Facebook">Facebook</option><option value="Website">Website</option><option value="WhatsApp">WhatsApp</option></select></div><button type="submit" class="btn btn--primary">Upload</button></form></div><div class="data-summary"><h3>Riwayat Upload Promosi</h3><div id="promosiSummary" class="summary-table"></div></div></div>
             <div id="door-to-door" class="content-page"><div class="page-header"><h2>Door-to-door Perusahaan</h2></div><div class="form-container"><form id="doorToDoorForm" class="kpi-form" data-sheet-name="DoorToDoor"><div class="form-group"><label class="form-label">Tanggal Kunjungan</label><input type="date" name="visitDate" class="form-control" required></div><div class="form-group"><label class="form-label">Nama Instansi</label><input type="text" name="institutionName" class="form-control" required></div><div class="form-group"><label class="form-label">Alamat Lengkap Instansi</label><textarea name="address" class="form-control" rows="2" required></textarea></div><div class="form-group"><label class="form-label">Nama PIC Instansi</label><input type="text" name="picName" class="form-control" required></div><div class="form-group"><label class="form-label">Nomor HP PIC</label><input type="text" name="picPhone" class="form-control" required></div><div class="form-group"><label class="form-label">Hasil Respons Kunjungan</label><textarea name="response" class="form-control" rows="3" required></textarea></div><div class="form-group"><label class="form-label">Bukti Kunjungan</label><input type="file" name="proof" class="form-control" accept="image/*"></div><button type="submit" class="btn btn--primary">Simpan</button></form></div><div class="data-summary"><h3>Rekap Door-to-door</h3><div id="doorToDoorSummary" class="summary-table"></div></div></div>
@@ -206,7 +223,7 @@
         </div>
     </div>
 
-    <!-- PERUBAHAN: Modal baru untuk menampilkan detail generik -->
+    <!-- Modal baru untuk menampilkan detail generik -->
     <div id="detailModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
