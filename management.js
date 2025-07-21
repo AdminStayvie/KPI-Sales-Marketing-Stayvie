@@ -1,14 +1,14 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 2.2.0
+ * @version 2.3.0
  *
- * Perubahan Utama (v2.2.0):
- * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci sekarang menampilkan indikator ✓ (tercapai) atau ✗ (tidak tercapai) untuk SEMUA jenis target (harian, mingguan, bulanan) agar lebih seragam dan mudah dibaca.
+ * Perubahan Utama (v2.3.0):
+ * - PENINGKATAN LEADERBOARD: Papan Peringkat Sales sekarang menampilkan lebih banyak kolom rincian aktivitas (DoorToDoor, Quotations) untuk memberikan gambaran yang lebih komprehensif.
  *
  * Perubahan Sebelumnya:
+ * - PENYERAGAMAN TAMPILAN: Laporan Kinerja Rinci menampilkan ✓ atau ✗ untuk semua jenis target.
  * - PERBAIKAN BUG KRITIS: Filter sekarang menggunakan rentang tanggal lengkap (mulai DAN akhir).
- * - KONSISTENSI DATA: Semua komponen di dashboard sekarang sepenuhnya sinkron dengan filter periode.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -147,15 +147,45 @@ function updateLeaderboard(periodStartDate, periodEndDate) {
     };
 
     const leaderboardData = allSalesUsers.map(salesName => {
-        const leads = (allData.leads || []).filter(d => d.sales === salesName).filter(dateFilter).length;
-        const canvasing = (allData.canvasing || []).filter(d => d.sales === salesName).filter(dateFilter).length;
-        const promosi = (allData.promosi || []).filter(d => d.sales === salesName).filter(dateFilter).length;
-        const total = TRACKED_ACTIVITY_KEYS.reduce((acc, key) => acc + (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length, 0);
-        return { name: salesName, leads, canvasing, promosi, total };
+        const activities = {};
+        TRACKED_ACTIVITY_KEYS.forEach(key => {
+            activities[key] = (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length;
+        });
+        const total = Object.values(activities).reduce((sum, count) => sum + count, 0);
+        
+        return { name: salesName, ...activities, total };
     });
 
     leaderboardData.sort((a, b) => b.total - a.total);
-    container.innerHTML = `<table><thead><tr><th>Nama Sales</th><th>Leads</th><th>Canvasing</th><th>Promosi</th><th>Total Aktivitas</th></tr></thead><tbody>${leaderboardData.map(s => `<tr><td>${s.name}</td><td>${s.leads}</td><td>${s.canvasing}</td><td>${s.promosi}</td><td><strong>${s.total}</strong></td></tr>`).join('')}</tbody></table>`;
+    
+    // <<< PERUBAHAN: Tambahkan header kolom baru di sini
+    container.innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama Sales</th>
+                    <th>Leads</th>
+                    <th>Canvasing</th>
+                    <th>Promosi</th>
+                    <th>DoorToDoor</th>
+                    <th>Quotations</th>
+                    <th>Total Aktivitas</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${leaderboardData.map(s => `
+                    <tr>
+                        <td>${s.name}</td>
+                        <td>${s.leads || 0}</td>
+                        <td>${s.canvasing || 0}</td>
+                        <td>${s.promosi || 0}</td>
+                        <td>${s.doorToDoor || 0}</td>
+                        <td>${s.quotations || 0}</td>
+                        <td><strong>${s.total}</strong></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>`;
 }
 
 // =================================================================================
