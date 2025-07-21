@@ -27,7 +27,7 @@
         .performance-table td:first-child { text-align: left; font-weight: 500; background-color: var(--color-secondary); width: 250px; }
         .check-mark { color: var(--color-success); font-weight: bold; }
         .cross-mark { color: var(--color-error); font-weight: bold; }
-        .off-day { background-color: var(--color-gray-300) !important; color: var(--color-text-secondary); }
+        .off-day { background-color: var(--color-gray-200) !important; color: var(--color-text-secondary); }
         
         .time-off-container { display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-24); }
         .time-off-form { display: flex; flex-direction: column; gap: var(--space-16); }
@@ -40,6 +40,12 @@
         .main-content { flex-grow: 1; margin-left: 260px; margin-top: 60px; padding: var(--space-24); }
         .content-page { display: none; }
         .content-page.active { display: block; }
+
+        /* Dark mode specific for off-day */
+        [data-color-scheme="dark"] .off-day {
+            background-color: var(--color-charcoal-700) !important;
+        }
+
     </style>
 </head>
 <body>
@@ -72,6 +78,16 @@
                 <!-- Halaman 1: Dashboard Utama -->
                 <div id="mainDashboard" class="content-page active">
                     <div class="page-header"><h2>Ringkasan Kinerja Tim</h2></div>
+                    <div class="filters" style="margin-bottom: 24px; display: flex; gap: 16px; align-items: center;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="yearFilter" class="form-label">Tahun</label>
+                            <select id="yearFilter" class="form-control" style="width: 120px;"></select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="periodFilter" class="form-label">Periode</label>
+                            <select id="periodFilter" class="form-control" style="width: 200px;"></select>
+                        </div>
+                    </div>
                     <div class="stats-grid">
                         <div class="stat-card"><h3>Total Leads</h3><p class="value" id="totalLeads">0</p></div>
                         <div class="stat-card"><h3>Total Canvasing</h3><p class="value" id="totalCanvasing">0</p></div>
@@ -84,10 +100,6 @@
                             <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
                             <div class="card__body">
                                 <div id="performanceReportContainer" class="performance-report-container">
-                                    <div class="filters">
-                                        <select id="yearFilter" class="form-control" style="width: 120px;"></select>
-                                        <select id="periodFilter" class="form-control" style="width: 200px;"></select>
-                                    </div>
                                     <div id="tabsContainer" class="tabs-container"></div>
                                     <div id="tabContentContainer"></div>
                                 </div>
@@ -124,6 +136,9 @@
             </main>
         </div>
     </div>
+    
+    <!-- PERUBAHAN: Muat utils.js SEBELUM management.js -->
+    <script src="utils.js"></script>
     <script src="management.js"></script>
 </body>
 </html>
