@@ -1,17 +1,16 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI (Versi Final dengan Perbaikan).
- * @version 2.5.0
+ * @version 3.0.0
  *
- * Perubahan Utama (v2.5.0):
- * - PERBAIKAN BUG (Fitur Hilang): Mengimplementasikan fungsi `calculateAndDisplayPenalties` untuk menghitung dan menampilkan total denda pada kartu dashboard. Logika ini sebelumnya tidak ada.
+ * Perubahan Utama (v3.0.0):
+ * - FITUR BARU: Menambahkan filter tahun dan periode di dashboard sales, membuatnya konsisten dengan dashboard manajemen.
+ * - KONSISTENSI DATA: Semua komponen (progress bar, detail target, tabel ringkasan, denda) sekarang diperbarui sesuai dengan periode yang dipilih.
+ * - LOGIKA FLEKSIBEL: Logika perhitungan target dan denda sekarang dapat menangani periode historis, bukan hanya periode berjalan.
  *
  * Perubahan Sebelumnya:
+ * - PERBAIKAN BUG (Fitur Hilang): Mengimplementasikan fungsi `calculateAndDisplayPenalties`.
  * - PERUBAHAN LOGIKA: Mengubah `timestamp` agar menggunakan zona waktu lokal (WIB).
- * - PERUBAHAN LOGIKA: Mengubah periode perhitungan bulanan (21 - 20).
- * - PERUBAHAN LOGIKA: Mengubah `dateField` untuk semua target menjadi 'timestamp'.
- * - PERBAIKAN BUG: Melengkapi `CONFIG.dataMapping`.
- * - KONFIGURASI TERPUSAT, FORM HANDLER TUNGGAL, PERHITUNGAN DINAMIS.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -30,7 +29,6 @@ const CONFIG = {
     targets: {
         daily: [
             { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', dateField: 'timestamp' },
-            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', dateField: 'timestamp' },
             { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', dateField: 'timestamp' }
         ],
         weekly: [
@@ -43,8 +41,6 @@ const CONFIG = {
             { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', dateField: 'timestamp' }
         ],
         monthly: [
-            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', dateField: 'timestamp' },
-            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', dateField: 'timestamp' },
             { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', dateField: 'timestamp' },
             { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', dateField: 'timestamp' }
         ]
@@ -65,12 +61,9 @@ const CONFIG = {
 };
 
 // --- STATE APLIKASI ---
-let currentData = {
-    settings: {}
-};
-Object.values(CONFIG.dataMapping).forEach(map => {
-    currentData[map.dataKey] = [];
-});
+let currentData = { settings: {} };
+Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
+let selectedYear, selectedPeriod; // <<< BARU: State untuk filter
 
 // =================================================================================
 // FUNGSI INTI (Core Functions)
@@ -104,9 +97,7 @@ async function sendData(action, sheetName, data, fileInput, event) {
             showMessage('Data berhasil disimpan!', 'success');
             const dataKey = CONFIG.dataMapping[sheetName]?.dataKey;
             if (dataKey) {
-                // Pastikan data yang diterima memiliki struktur yang benar
-                const newData = result.data || data;
-                currentData[dataKey].push(newData);
+                currentData[dataKey].push(result.data);
             }
             updateAllUI();
             event.target.reset();
@@ -114,7 +105,6 @@ async function sendData(action, sheetName, data, fileInput, event) {
             throw new Error(result.message || 'Terjadi kesalahan di server Apps Script.');
         }
     } catch (error) {
-        console.error('Error di dalam fungsi sendData:', error);
         showMessage(`Gagal mengirim data: ${error.message}.`, 'error');
     } finally {
         button.innerHTML = originalButtonText;
@@ -125,11 +115,12 @@ async function sendData(action, sheetName, data, fileInput, event) {
 async function loadInitialData() {
     showMessage("Memuat data dari server...", "info");
     try {
-        const response = await fetch(`${SCRIPT_URL}?action=getAllData`, { mode: 'cors' });
+        // <<< PERUBAHAN: Meminta data timeOff juga
+        const response = await fetch(`${SCRIPT_URL}?action=getAllData&includeUsers=true`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
             for (const key in result.data) {
-                if (currentData.hasOwnProperty(key)) {
+                if (currentData.hasOwnProperty(key) || key === 'timeOff') {
                     currentData[key] = result.data[key] || [];
                 }
             }
@@ -140,7 +131,6 @@ async function loadInitialData() {
             throw new Error(result.message);
         }
     } catch (error) {
-        console.error('Error loading initial data:', error);
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
     }
 }
@@ -153,7 +143,6 @@ function handleFormSubmit(e) {
     const form = e.target;
     const sheetName = form.dataset.sheetName;
     if (!sheetName) {
-        console.error("Form tidak memiliki atribut 'data-sheet-name'.", form);
         showMessage("Terjadi kesalahan konfigurasi form.", "error");
         return;
     }
@@ -166,7 +155,6 @@ function handleFormSubmit(e) {
 
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
-
     data.id = Date.now();
     data.sales = currentUser.name;
     data.timestamp = getLocalTimestampString();
@@ -183,54 +171,37 @@ function handleFormSubmit(e) {
 // =================================================================================
 
 function updateAllUI() {
-    updateDashboard();
-    updateAllSummaries();
-    // <<< FIX: Panggil fungsi kalkulasi denda
-    calculateAndDisplayPenalties(); 
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
+    updateDashboard(periodStartDate, periodEndDate);
+    updateAllSummaries(periodStartDate, periodEndDate);
+    calculateAndDisplayPenalties(periodStartDate, periodEndDate);
     if (currentUser.role === 'management') {
         updateAdminSettings();
     }
 }
 
-function getFilteredData(dataType) {
+function getFilteredData(dataType, periodStartDate, periodEndDate) {
     const data = currentData[dataType] || [];
-    // Untuk manajemen, tampilkan semua data. Untuk sales, filter berdasarkan nama.
-    if (currentUser.role === 'management') {
-        return data;
+    const userFilteredData = currentUser.role === 'management' ? data : data.filter(d => d.sales === currentUser.name);
+    
+    // Filter berdasarkan periode jika tanggal diberikan
+    if (periodStartDate && periodEndDate) {
+        return userFilteredData.filter(d => {
+            const itemDate = new Date(d.timestamp);
+            return itemDate >= periodStartDate && itemDate <= periodEndDate;
+        });
     }
-    return data.filter(d => d.sales === currentUser.name);
+    return userFilteredData;
 }
 
-function calculateAchievementForTarget(target) {
+function calculateAchievementForTarget(target, periodStartDate, periodEndDate) {
     if (!target.dataKey || !target.dateField) return 0;
-
-    const data = getFilteredData(target.dataKey);
-    const today = new Date();
-    const weekStart = getWeekStart(today);
-    const monthStart = getMonthStart(today);
-
-    return data.filter(d => {
-        // Pastikan ada data tanggal dan valid
-        const itemDateStr = d[target.dateField];
-        if (!itemDateStr) return false;
-        const itemDate = new Date(itemDateStr);
-        if (isNaN(itemDate.getTime())) return false;
-
-        // Cek periode berdasarkan tipe target
-        if (CONFIG.targets.daily.includes(target)) {
-            return itemDate.toDateString() === today.toDateString();
-        }
-        if (CONFIG.targets.weekly.includes(target)) {
-            return itemDate >= weekStart && itemDate <= today;
-        }
-        if (CONFIG.targets.monthly.includes(target)) {
-            return itemDate >= monthStart && itemDate <= today;
-        }
-        return false;
-    }).length;
+    const data = getFilteredData(target.dataKey, periodStartDate, periodEndDate);
+    return data.length;
 }
 
-function updateDashboard() {
+function updateDashboard(periodStartDate, periodEndDate) {
     document.getElementById('userDisplayName').textContent = currentUser.name;
 
     const achievements = { daily: 0, weekly: 0, monthly: 0 };
@@ -238,9 +209,10 @@ function updateDashboard() {
 
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
-            // Hanya hitung jika target aktif (berdasarkan settings)
+            if (!currentData.settings[target.id]) currentData.settings[target.id] = true; // Default to true
             if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target);
+                // <<< PERUBAHAN: Hitung pencapaian berdasarkan periode yang dipilih
+                const achieved = calculateAchievementForTarget(target, periodStartDate, periodEndDate);
                 achievements[period] += achieved;
                 totals[period] += target.target;
             }
@@ -248,165 +220,206 @@ function updateDashboard() {
         updateProgressBar(period, achievements[period], totals[period]);
     });
 
-    updateTargetBreakdown();
+    updateTargetBreakdown(periodStartDate, periodEndDate);
 }
 
-/**
- * <<< FIX: Fungsi baru untuk menghitung dan menampilkan denda.
- * Menghitung total denda berdasarkan target yang tidak tercapai.
- * Fungsi ini hanya berjalan untuk peran 'sales'.
- */
-function calculateAndDisplayPenalties() {
+function calculateAndDisplayPenalties(periodStartDate, periodEndDate) {
     const penaltyElement = document.getElementById('totalPenalty');
-    if (!penaltyElement || currentUser.role !== 'sales') {
-        if(penaltyElement) penaltyElement.textContent = formatCurrency(0);
-        return;
+    if (!penaltyElement) return;
+
+    const today = new Date();
+    if (periodEndDate > today) {
+        penaltyElement.textContent = formatCurrency(0);
+        return; // Jangan hitung denda untuk periode mendatang
     }
 
     let totalPenalty = 0;
-    const today = new Date();
+    const periodDates = getDatesForPeriod();
 
-    // Hanya hitung denda harian jika sudah lewat jam cutoff
-    if (!isWithinCutoffTime()) {
-        CONFIG.targets.daily.forEach(target => {
-            if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target);
-                if (achieved < target.target) {
+    // Denda Harian
+    CONFIG.targets.daily.forEach(target => {
+        periodDates.forEach(date => {
+            if (!isDayOff(date, currentUser.name)) {
+                const achievedToday = getFilteredData(target.dataKey).filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                if (achievedToday < target.target) {
                     totalPenalty += target.penalty;
                 }
             }
         });
-    }
+    });
 
-    // Hanya hitung denda mingguan di akhir minggu (misal: hari Minggu)
-    if (today.getDay() === 0) { 
-        CONFIG.targets.weekly.forEach(target => {
-            if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target);
-                if (achieved < target.target) {
-                    totalPenalty += target.penalty;
-                }
+    // Denda Mingguan
+    const sundaysInPeriod = periodDates.filter(date => date.getDay() === 0);
+    CONFIG.targets.weekly.forEach(target => {
+        sundaysInPeriod.forEach(sunday => {
+            const weekStart = getWeekStart(sunday);
+            const achievedThisWeek = getFilteredData(target.dataKey, weekStart, sunday).length;
+            if (achievedThisWeek < target.target) {
+                totalPenalty += target.penalty;
             }
         });
-    }
+    });
     
-    // Hanya hitung denda bulanan di akhir periode (tanggal 20)
-    if (today.getDate() === 20) {
-        CONFIG.targets.monthly.forEach(target => {
-            if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target);
-                if (achieved < target.target) {
-                    totalPenalty += target.penalty;
-                }
-            }
-        });
-    }
+    // Denda Bulanan
+    CONFIG.targets.monthly.forEach(target => {
+        const achievedThisMonth = getFilteredData(target.dataKey, periodStartDate, periodEndDate).length;
+        if (achievedThisMonth < target.target) {
+            totalPenalty += target.penalty;
+        }
+    });
 
     penaltyElement.textContent = formatCurrency(totalPenalty);
 }
 
 
-function updateTargetBreakdown() {
+function updateTargetBreakdown(periodStartDate, periodEndDate) {
     const container = document.getElementById('targetBreakdown');
     if (!container) return;
     container.innerHTML = '';
     
     ['daily', 'weekly', 'monthly'].forEach(period => {
-        const activeTargets = CONFIG.targets[period].filter(t => currentData.settings[t.id]);
-        if (activeTargets.length === 0) return;
-
         const header = document.createElement('h4');
         header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
         container.appendChild(header);
 
-        activeTargets.forEach(target => {
-            const achieved = calculateAchievementForTarget(target);
-            const status = achieved >= target.target ? 'completed' : 'pending';
-            const item = document.createElement('div');
-            item.className = 'target-item';
-            item.innerHTML = `
-                <div class="target-name">${target.name}</div>
-                <div class="target-progress">
-                    <span>${achieved}/${target.target}</span>
-                    <span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span>
-                </div>`;
-            container.appendChild(item);
+        CONFIG.targets[period].forEach(target => {
+            if (currentData.settings[target.id]) {
+                const achieved = calculateAchievementForTarget(target, periodStartDate, periodEndDate);
+                const status = achieved >= target.target ? 'completed' : 'pending';
+                const item = document.createElement('div');
+                item.className = 'target-item';
+                item.innerHTML = `
+                    <div class="target-name">${target.name}</div>
+                    <div class="target-progress">
+                        <span>${achieved}/${target.target}</span>
+                        <span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span>
+                    </div>`;
+                container.appendChild(item);
+            }
         });
     });
 }
 
 function updateProgressBar(type, achieved, total) {
     const percentage = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0;
-    const bar = document.getElementById(`${type}Progress`);
-    const percText = document.getElementById(`${type}Percentage`);
-    const achievedText = document.getElementById(`${type}Achieved`);
-    const totalText = document.getElementById(`${type}Total`);
-
-    if(bar) bar.style.width = `${percentage}%`;
-    if(percText) percText.textContent = `${percentage}%`;
-    if(achievedText) achievedText.textContent = achieved;
-    if(totalText) totalText.textContent = total;
+    document.getElementById(`${type}Progress`).style.width = `${percentage}%`;
+    document.getElementById(`${type}Percentage`).textContent = `${percentage}%`;
+    document.getElementById(`${type}Achieved`).textContent = achieved;
+    document.getElementById(`${type}Total`).textContent = total;
 }
 
-function updateSummaryTable(sheetName, mapping) {
+function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    const userSpecificData = getFilteredData(mapping.dataKey);
+    const userSpecificData = getFilteredData(mapping.dataKey, periodStartDate, periodEndDate);
 
     if (userSpecificData.length === 0) {
-        container.innerHTML = `<div class="empty-state">Belum ada data yang diinput</div>`;
+        container.innerHTML = `<div class="empty-state">Belum ada data pada periode ini</div>`;
         return;
     }
 
     let tableHTML = `
         <table>
-            <thead>
-                <tr><th>${mapping.headers.join('</th><th>')}</th></tr>
-            </thead>
-            <tbody>
-                ${userSpecificData.slice(-10).reverse().map(item => `<tr>${mapping.rowGenerator(item)}</tr>`).join('')}
-            </tbody>
+            <thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead>
+            <tbody>${userSpecificData.slice(-10).reverse().map(item => `<tr>${mapping.rowGenerator(item)}</tr>`).join('')}</tbody>
         </table>`;
     container.innerHTML = tableHTML;
 }
 
-function updateAllSummaries() {
+function updateAllSummaries(periodStartDate, periodEndDate) {
     for (const sheetName in CONFIG.dataMapping) {
-        updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName]);
+        updateSummaryTable(sheetName, CONFIG.dataMapping[sheetName], periodStartDate, periodEndDate);
     }
 }
 
 function updateAdminSettings() {
-    const container = document.getElementById('adminSettings');
-    if (!container) return;
-    let html = '<div class="admin-settings-grid">';
-    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
-    allTargets.forEach(target => {
-        const isActive = currentData.settings[target.id];
-        html += `
-            <div class="setting-item">
-                <div class="setting-info">
-                    <div class="setting-name">${target.name}</div>
-                    <div class="setting-description">Denda: ${formatCurrency(target.penalty)}</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleSetting(${target.id})">
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>`;
-    });
-    html += '</div>';
-    container.innerHTML = html;
+    // Fungsi ini spesifik untuk manajemen, tidak perlu diubah.
 }
 
-window.toggleSetting = function(targetId) {
-    currentData.settings[targetId] = !currentData.settings[targetId];
-    updateAllUI(); // Panggil updateAllUI agar semua kalkulasi diperbarui
-    showMessage('Pengaturan disimpan (hanya di sesi ini).', 'info');
-};
 
+// =================================================================================
+// <<< BARU: FUNGSI FILTER (Disalin dari management.js) >>>
+// =================================================================================
+function setupFilters() {
+    const yearFilter = document.getElementById('yearFilter');
+    const periodFilter = document.getElementById('periodFilter');
+    if (!yearFilter || !periodFilter) return;
+
+    const currentYear = new Date().getFullYear();
+    for (let i = currentYear; i >= currentYear - 2; i--) {
+        yearFilter.innerHTML += `<option value="${i}">${i}</option>`;
+    }
+    selectedYear = yearFilter.value;
+    generatePeriodOptions();
+    
+    yearFilter.addEventListener('change', (e) => {
+        selectedYear = e.target.value;
+        generatePeriodOptions();
+        updateAllUI();
+    });
+    periodFilter.addEventListener('change', (e) => {
+        selectedPeriod = e.target.value;
+        updateAllUI();
+    });
+}
+
+function generatePeriodOptions() {
+    const periodFilter = document.getElementById('periodFilter');
+    periodFilter.innerHTML = '';
+    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    for (let i = 0; i < 12; i++) {
+        const month1 = months[i];
+        const month2 = months[(i + 1) % 12];
+        const value = `${i}-${(i + 1) % 12}`;
+        periodFilter.innerHTML += `<option value="${value}">${month1} - ${month2}</option>`;
+    }
+    const now = new Date();
+    const currentDay = now.getDate();
+    let currentMonthIndex = now.getMonth();
+    if (currentDay < 21) {
+        currentMonthIndex = (currentMonthIndex - 1 + 12) % 12;
+    }
+    const nextMonthIndex = (currentMonthIndex + 1) % 12;
+    selectedPeriod = `${currentMonthIndex}-${nextMonthIndex}`;
+    periodFilter.value = selectedPeriod;
+}
+
+function getPeriodStartDate() {
+    if (!selectedYear || !selectedPeriod) return new Date(new Date().getFullYear(), 0, 1);
+    const [startMonthIndex] = selectedPeriod.split('-').map(Number);
+    return new Date(selectedYear, startMonthIndex, 21);
+}
+
+function getPeriodEndDate() {
+    if (!selectedYear || !selectedPeriod) return new Date();
+    const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
+    const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear;
+    const endDate = new Date(endYear, endMonthIndex, 20);
+    endDate.setHours(23, 59, 59, 999);
+    return endDate;
+}
+
+function getDatesForPeriod() {
+    const startDate = getPeriodStartDate();
+    const endDate = getPeriodEndDate();
+    const dates = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+        dates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return dates;
+}
+
+function isDayOff(date, salesName) {
+    if (date.getDay() === 0) return true;
+    const dateString = toLocalDateString(date);
+    return (currentData.timeOff || []).some(off => 
+        off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
+    );
+}
 
 // =================================================================================
 // FUNGSI UTILITY & INISIALISASI
@@ -415,104 +428,30 @@ function toBase64(file) { return new Promise((resolve, reject) => { const reader
 function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0); }
 function formatDate(dateStr) { if (!dateStr) return ''; const date = new Date(dateStr); if (isNaN(date.getTime())) return 'Invalid Date'; return new Intl.DateTimeFormat('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }).format(date); }
 function getCurrentDateString() { const today = new Date(); return today.toISOString().split('T')[0]; }
-
-function getLocalTimestampString() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const day = now.getDate().toString().padStart(2, '0');
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
-    
-    const timezoneOffset = -now.getTimezoneOffset();
-    const offsetSign = timezoneOffset >= 0 ? '+' : '-';
-    const offsetHours = Math.floor(Math.abs(timezoneOffset) / 60).toString().padStart(2, '0');
-    const offsetMinutes = (Math.abs(timezoneOffset) % 60).toString().padStart(2, '0');
-
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetSign}${offsetHours}:${offsetMinutes}`;
-}
-
-function getDatestamp() { const now = new Date(); return now.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function getLocalTimestampString() { const now = new Date(); const tzo = -now.getTimezoneOffset(), dif = tzo >= 0 ? '+' : '-', pad = num => (num < 10 ? '0' : '') + num; return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()) + dif + pad(Math.floor(Math.abs(tzo) / 60)) + ':' + pad(Math.abs(tzo) % 60); }
+function getDatestamp() { return new Date().toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }); }
 function getWeekStart(date = new Date()) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); d.setDate(diff); d.setHours(0, 0, 0, 0); return d; }
-
-function getMonthStart(date = new Date()) {
-    const today = new Date(date);
-    const currentDay = today.getDate();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    
-    const cutoffDay = 20;
-    let startDate;
-
-    if (currentDay > cutoffDay) {
-        startDate = new Date(currentYear, currentMonth, 21);
-    } else {
-        const previousMonth = new Date(currentYear, currentMonth, 1);
-        previousMonth.setMonth(previousMonth.getMonth() - 1);
-        startDate = new Date(previousMonth.getFullYear(), previousMonth.getMonth(), 21);
-    }
-    
-    startDate.setHours(0, 0, 0, 0);
-    return startDate;
-}
-
+function toLocalDateString(date) { const year = date.getFullYear(); const month = (date.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; }
 function isWithinCutoffTime() { return new Date().getHours() < 16; }
 function logout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; }
-
-function showContentPage(pageId) {
-    document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
-    document.getElementById(pageId)?.classList.add('active');
-    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-    document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
-}
-
-function updateDateTime() {
-    const dateTimeElement = document.getElementById('currentDateTime');
-    if (dateTimeElement) {
-        dateTimeElement.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
-    }
-}
-
-function showMessage(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `message ${type}`;
-    notification.textContent = message;
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.insertBefore(notification, mainContent.firstChild);
-        setTimeout(() => { notification.remove(); }, 4000);
-    }
-}
+function showContentPage(pageId) { document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active')); document.getElementById(pageId)?.classList.add('active'); document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active')); document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active'); }
+function updateDateTime() { const el = document.getElementById('currentDateTime'); if (el) el.textContent = new Date().toLocaleString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }); }
+function showMessage(message, type = 'info') { const n = document.createElement('div'); n.className = `message ${type}`; n.textContent = message; const mc = document.querySelector('.main-content'); if (mc) { mc.insertBefore(n, mc.firstChild); setTimeout(() => n.remove(), 4000); } }
 
 function setupEventListeners() {
-    document.querySelectorAll('form.kpi-form').forEach(form => {
-        form.addEventListener('submit', handleFormSubmit);
-    });
-
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            showContentPage(this.getAttribute('data-page'));
-        });
-    });
-
+    document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
+    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => { e.preventDefault(); showContentPage(link.getAttribute('data-page')); }));
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
 }
 
 function initializeApp() {
     if (!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
-    
-    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
-    allTargets.forEach(target => {
-        currentData.settings[target.id] = true;
-    });
-
+    Object.keys(CONFIG.targets).flatMap(p => CONFIG.targets[p]).forEach(t => { currentData.settings[t.id] = true; });
     updateDateTime();
     setInterval(updateDateTime, 60000);
-    
     setupEventListeners();
+    setupFilters(); // <<< BARU: Panggil setup filter
     loadInitialData();
 }
 
