@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Management Dashboard - KPI Sales</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Tambahkan library untuk grafik -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Tambahan style khusus untuk dashboard manajemen */
@@ -15,7 +14,6 @@
         .stat-card .value { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary); }
         .dashboard-layout { display: grid; grid-template-columns: 1fr; gap: var(--space-24); }
         
-        /* <<< CSS BARU UNTUK LAPORAN KINERJA INTERAKTIF >>> */
         .performance-report-container .filters { display: flex; gap: var(--space-16); margin-bottom: var(--space-16); align-items: center; }
         .tabs-container { display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-16); }
         .tab-button { padding: var(--space-10) var(--space-16); cursor: pointer; border: none; background: none; border-bottom: 3px solid transparent; font-size: var(--font-size-md); color: var(--color-text-secondary); }
@@ -29,15 +27,19 @@
         .performance-table td:first-child { text-align: left; font-weight: 500; background-color: var(--color-secondary); width: 250px; }
         .check-mark { color: var(--color-success); font-weight: bold; }
         .cross-mark { color: var(--color-error); font-weight: bold; }
-        .progress-fraction { font-weight: bold; }
         .off-day { background-color: var(--color-gray-300) !important; color: var(--color-text-secondary); }
         
-        /* <<< CSS BARU UNTUK PENGATURAN HARI LIBUR >>> */
         .time-off-container { display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-24); }
         .time-off-form { display: flex; flex-direction: column; gap: var(--space-16); }
         .time-off-list ul { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
         .time-off-list li { display: flex; justify-content: space-between; align-items: center; padding: var(--space-8); border-bottom: 1px solid var(--color-border); }
         .delete-btn { background: none; border: none; color: var(--color-error); cursor: pointer; }
+
+        /* <<< CSS BARU UNTUK LAYOUT DENGAN SIDEBAR >>> */
+        .app-layout { display: flex; }
+        .main-content { flex-grow: 1; margin-left: 260px; margin-top: 60px; padding: var(--space-24); }
+        .content-page { display: none; }
+        .content-page.active { display: block; }
     </style>
 </head>
 <body>
@@ -52,60 +54,75 @@
             </div>
         </header>
 
-        <main class="main-content" style="margin-left: 0; margin-top: 80px;">
-            <div class="page-header"><h2>Ringkasan Kinerja Tim</h2></div>
-            <div class="stats-grid">
-                <div class="stat-card"><h3>Total Leads</h3><p class="value" id="totalLeads">0</p></div>
-                <div class="stat-card"><h3>Total Canvasing</h3><p class="value" id="totalCanvasing">0</p></div>
-                <div class="stat-card"><h3>Sales Terbaik</h3><p class="value" id="topSales">N/A</p></div>
-                <div class="stat-card"><h3>Total Denda Tim</h3><p class="value" id="totalPenalty">Rp 0</p></div>
-            </div>
+        <!-- <<< PERUBAHAN: Layout sekarang menggunakan Sidebar >>> -->
+        <div class="app-layout">
+            <nav class="sidebar" style="top: 60px;">
+                <div class="sidebar-content">
+                    <div class="nav-section">
+                        <h3>Menu</h3>
+                        <ul class="nav-list">
+                            <li><a href="#" data-page="mainDashboard" class="nav-link active">Dashboard</a></li>
+                            <li><a href="#" data-page="timeOffSettings" class="nav-link">Pengaturan Libur</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
 
-            <div class="dashboard-layout">
-                <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
-                
-                <!-- <<< HALAMAN BARU: Pengaturan Hari Libur & Izin >>> -->
-                <div class="card">
-                    <div class="card__header"><h3>Pengaturan Hari Libur & Izin</h3></div>
-                    <div class="card__body">
-                        <div class="time-off-container">
-                            <form id="timeOffForm" class="time-off-form">
-                                <div class="form-group">
-                                    <label for="timeOffDate" class="form-label">Tanggal</label>
-                                    <input type="date" id="timeOffDate" class="form-control" required>
+            <main class="main-content">
+                <!-- Halaman 1: Dashboard Utama -->
+                <div id="mainDashboard" class="content-page active">
+                    <div class="page-header"><h2>Ringkasan Kinerja Tim</h2></div>
+                    <div class="stats-grid">
+                        <div class="stat-card"><h3>Total Leads</h3><p class="value" id="totalLeads">0</p></div>
+                        <div class="stat-card"><h3>Total Canvasing</h3><p class="value" id="totalCanvasing">0</p></div>
+                        <div class="stat-card"><h3>Sales Terbaik</h3><p class="value" id="topSales">N/A</p></div>
+                        <div class="stat-card"><h3>Total Denda Tim</h3><p class="value" id="totalPenalty">Rp 0</p></div>
+                    </div>
+                    <div class="dashboard-layout">
+                        <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
+                        <div class="card">
+                            <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
+                            <div class="card__body">
+                                <div id="performanceReportContainer" class="performance-report-container">
+                                    <div class="filters">
+                                        <select id="yearFilter" class="form-control" style="width: 120px;"></select>
+                                        <select id="periodFilter" class="form-control" style="width: 200px;"></select>
+                                    </div>
+                                    <div id="tabsContainer" class="tabs-container"></div>
+                                    <div id="tabContentContainer"></div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="timeOffSales" class="form-label">Untuk Sales</label>
-                                    <select id="timeOffSales" class="form-control" required></select>
-                                </div>
-                                <button type="submit" class="btn btn--primary">Simpan</button>
-                            </form>
-                            <div class="time-off-list">
-                                <h4>Daftar Tanggal Tersimpan</h4>
-                                <ul id="timeOffListContainer">
-                                    <!-- Daftar akan di-generate oleh JS -->
-                                </ul>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Laporan Kinerja Rinci per Sales -->
-                <div class="card">
-                    <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
-                    <div class="card__body">
-                        <div id="performanceReportContainer" class="performance-report-container">
-                            <div class="filters">
-                                <select id="yearFilter" class="form-control" style="width: 120px;"></select>
-                                <select id="periodFilter" class="form-control" style="width: 200px;"></select>
+                <!-- Halaman 2: Pengaturan Hari Libur & Izin -->
+                <div id="timeOffSettings" class="content-page">
+                    <div class="page-header"><h2>Pengaturan Hari Libur & Izin</h2></div>
+                    <div class="card">
+                        <div class="card__body">
+                            <div class="time-off-container">
+                                <form id="timeOffForm" class="time-off-form">
+                                    <div class="form-group">
+                                        <label for="timeOffDate" class="form-label">Tanggal</label>
+                                        <input type="date" id="timeOffDate" class="form-control" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="timeOffSales" class="form-label">Untuk Sales</label>
+                                        <select id="timeOffSales" class="form-control" required></select>
+                                    </div>
+                                    <button type="submit" class="btn btn--primary">Simpan</button>
+                                </form>
+                                <div class="time-off-list">
+                                    <h4>Daftar Tanggal Tersimpan</h4>
+                                    <ul id="timeOffListContainer"></ul>
+                                </div>
                             </div>
-                            <div id="tabsContainer" class="tabs-container"></div>
-                            <div id="tabContentContainer"></div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
     <script src="management.js"></script>
 </body>
