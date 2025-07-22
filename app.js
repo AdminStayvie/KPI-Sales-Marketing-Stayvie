@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.0.0 - Implementasi Sistem Validasi Data.
+ * @version 7.1.0 - Perbaikan Stabilitas dan Penanganan Error.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -38,30 +38,22 @@ const CONFIG = {
         ]
     },
     dataMapping: {
-        'Leads': { 
-            dataKey: 'leads', 
-            headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], 
-            rowGenerator: generateLeadRow,
-            detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' }
-        },
-        'Prospects': {
-            dataKey: 'prospects',
-            headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'],
-            rowGenerator: generateLeadRow,
-        },
-        'B2BBookings': { dataKey: 'b2bBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: CONFIG.dataMapping.Leads.detailLabels },
-        'VenueBookings': { dataKey: 'venueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: CONFIG.dataMapping.Leads.detailLabels },
-        'Deal Lainnya': { dataKey: 'dealLainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: CONFIG.dataMapping.Leads.detailLabels },
-        'Canvasing': { dataKey: 'canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
-        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Status Validasi'], rowGenerator: generateSimpleRow, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        // Kunci utama adalah dataKey dari target
+        'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
+        'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'quotations': { sheetName: 'Quotations', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'surveys': { sheetName: 'Surveys', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'reports': { sheetName: 'Reports', headers: ['Waktu', 'Periode', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'crmSurveys': { sheetName: 'CRMSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'conversions': { sheetName: 'Conversions', headers: ['Waktu', 'Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
     }
 };
 
@@ -89,7 +81,7 @@ async function loadInitialData() {
         const result = await response.json();
         if (result.status === 'success') {
             Object.keys(currentData).forEach(key => {
-                if (key !== 'settings') currentData[key] = [];
+                if (key !== 'settings' && key !== 'kpiSettings' && key !== 'timeOff') currentData[key] = [];
             });
             for (const key in result.data) {
                 currentData[key] = result.data[key] || [];
@@ -101,6 +93,7 @@ async function loadInitialData() {
         }
     } catch (error) {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        console.error("Load data error:", error);
     } finally {
         isFetchingData = false;
     }
@@ -133,6 +126,7 @@ async function sendData(action, payloadData, event) {
         }
     } catch (error) {
         showMessage(`Gagal memproses data: ${error.message}.`, 'error');
+        console.error("Send data error:", error);
     } finally {
         if (button) {
             button.innerHTML = originalButtonText;
@@ -183,7 +177,7 @@ function handleUpdateLead(e) {
     const statusLog = form.querySelector('#statusLog').value;
     
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
-    const leadData = allLeadsAndProspects.find(item => item.id === leadId);
+    const leadData = allLeadsAndProspects.find(item => item && item.id === leadId);
 
     if (!leadData) {
         showMessage('Data asli untuk diupdate tidak ditemukan!', 'error');
@@ -199,22 +193,28 @@ function handleUpdateLead(e) {
 // =================================================================================
 
 function updateAllUI() {
-    updateDashboard();
-    updateAllSummaries();
-    calculateAndDisplayPenalties();
-    updateValidationBreakdown();
+    try {
+        updateDashboard();
+        updateAllSummaries();
+        calculateAndDisplayPenalties();
+        updateValidationBreakdown();
+    } catch (error) {
+        console.error("Error updating UI:", error);
+        showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
+    }
 }
 
 function getFilteredData(dataType, validationFilter = ['Approved']) {
     const data = currentData[dataType] || [];
+    if (!Array.isArray(data)) return [];
     if (validationFilter.includes('All')) {
         return data;
     }
-    return data.filter(item => validationFilter.includes(item.validationStatus));
+    return data.filter(item => item && validationFilter.includes(item.validationStatus));
 }
 
 function calculateAchievementForTarget(target, validationFilter) {
-    if (!target.dataKey) return 0;
+    if (!target || !target.dataKey) return 0;
     const data = getFilteredData(target.dataKey, validationFilter);
     return data.length;
 }
@@ -228,7 +228,6 @@ function updateDashboard() {
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
-                // Progres bar KPI berdasarkan data yang sudah di-approve
                 const achieved = calculateAchievementForTarget(target, ['Approved']);
                 achievements[period] += achieved;
                 totals[period] += target.target;
@@ -244,11 +243,9 @@ function calculateAndDisplayPenalties() {
     const finalPenaltyEl = document.getElementById('finalPenalty');
     if (!potentialPenaltyEl || !finalPenaltyEl) return;
 
-    // Hitung Potensi Denda (data Approved + Pending)
     const potentialPenalty = calculatePenaltyForValidationStatus(['Approved', 'Pending']);
     potentialPenaltyEl.textContent = formatCurrency(potentialPenalty);
 
-    // Hitung Denda Final (hanya data Approved)
     const finalPenalty = calculatePenaltyForValidationStatus(['Approved']);
     finalPenaltyEl.textContent = formatCurrency(finalPenalty);
 }
@@ -269,7 +266,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
         datesToCheck.forEach(date => {
             if (!isDayOff(date, currentUser.name)) {
                 const achievedToday = getFilteredData(target.dataKey, validationFilter)
-                    .filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                    .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
                 if (achievedToday < target.target) totalPenalty += target.penalty;
             }
         });
@@ -282,6 +279,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
             const weekStart = getWeekStart(sunday);
             const achievedThisWeek = getFilteredData(target.dataKey, validationFilter)
                 .filter(d => {
+                    if (!d) return false;
                     const itemDate = new Date(d.timestamp);
                     return itemDate >= weekStart && itemDate <= sunday;
                 }).length;
@@ -311,7 +309,7 @@ function updateTargetBreakdown() {
         container.appendChild(header);
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['Approved']); // Hanya dari data approved
+                const achieved = calculateAchievementForTarget(target, ['Approved']);
                 const status = achieved >= target.target ? 'completed' : 'pending';
                 container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
             }
@@ -326,12 +324,16 @@ function updateValidationBreakdown() {
     let total = 0, approved = 0, pending = 0, rejected = 0;
     Object.values(CONFIG.dataMapping).forEach(map => {
         const data = currentData[map.dataKey] || [];
-        data.forEach(item => {
-            total++;
-            if (item.validationStatus === 'Approved') approved++;
-            else if (item.validationStatus === 'Pending') pending++;
-            else if (item.validationStatus === 'Rejected') rejected++;
-        });
+        if (Array.isArray(data)) {
+            data.forEach(item => {
+                if(item) {
+                    total++;
+                    if (item.validationStatus === 'Approved') approved++;
+                    else if (item.validationStatus === 'Pending') pending++;
+                    else if (item.validationStatus === 'Rejected') rejected++;
+                }
+            });
+        }
     });
 
     container.innerHTML = `
@@ -340,38 +342,42 @@ function updateValidationBreakdown() {
             <div class="stat-item pending"><strong>${pending}</strong> Pending</div>
             <div class="stat-item rejected"><strong>${rejected}</strong> Ditolak</div>
             <div class="stat-item total"><strong>${total}</strong> Total Data</div>
-        </div>
-    `;
+        </div>`;
 }
 
 function updateProgressBar(type, achieved, total) {
     const percentage = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0;
-    document.getElementById(`${type}Progress`).style.width = `${percentage}%`;
-    document.getElementById(`${type}Percentage`).textContent = `${percentage}%`;
-    document.getElementById(`${type}Achieved`).textContent = achieved;
-    document.getElementById(`${type}Total`).textContent = total;
+    const progressFill = document.getElementById(`${type}Progress`);
+    const percentageText = document.getElementById(`${type}Percentage`);
+    const achievedText = document.getElementById(`${type}Achieved`);
+    const totalText = document.getElementById(`${type}Total`);
+
+    if (progressFill) progressFill.style.width = `${percentage}%`;
+    if (percentageText) percentageText.textContent = `${percentage}%`;
+    if (achievedText) achievedText.textContent = achieved;
+    if (totalText) totalText.textContent = total;
 }
 
 function updateAllSummaries() {
     updateLeadTabs();
-    for (const sheetName in CONFIG.dataMapping) {
-        const mapping = CONFIG.dataMapping[sheetName];
-        if (sheetName !== 'Leads' && sheetName !== 'Prospects' && !sheetName.includes('Booking') && !sheetName.includes('Deal')) {
-             updateSimpleSummaryTable(sheetName, mapping);
+    Object.keys(CONFIG.dataMapping).forEach(dataKey => {
+        const mapping = CONFIG.dataMapping[dataKey];
+        const containerId = `${dataKey}Summary`;
+        const container = document.getElementById(containerId);
+        if (container) {
+            updateSimpleSummaryTable(dataKey, mapping, container);
         }
-    }
+    });
 }
 
-function updateSimpleSummaryTable(sheetName, mapping) {
-    const containerId = `${mapping.dataKey}Summary`;
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    const dataToDisplay = getFilteredData(mapping.dataKey, ['All']);
+function updateSimpleSummaryTable(dataKey, mapping, container) {
+    const dataToDisplay = getFilteredData(dataKey, ['All']);
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
     }
-    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => mapping.rowGenerator(item, mapping.dataKey)).join('')}</tbody></table>`;
+    const rowGenerator = window[mapping.rowGenerator];
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
@@ -385,33 +391,35 @@ function updateLeadTabs() {
     const allProspects = currentData.prospects || [];
     const allDeals = [...(currentData.b2bBookings || []), ...(currentData.venueBookings || []), ...(currentData.dealLainnya || [])];
     
-    const dealIds = new Set(allDeals.map(d => d.id.replace('deal_', 'item_')));
-    const leads = allLeads.filter(item => item.status === 'Lead');
-    const prospects = allProspects.filter(p => !dealIds.has(p.id.replace('prospect_', 'item_')));
-    const deals = allDeals;
+    const dealIds = new Set(allDeals.map(d => d && d.id.replace('deal_', 'item_')));
+    const leads = allLeads.filter(item => item && item.status === 'Lead');
+    const prospects = allProspects.filter(p => p && !dealIds.has(p.id.replace('prospect_', 'item_')));
 
-    renderLeadTable(leadContainer, leads, 'Leads');
-    renderLeadTable(prospectContainer, prospects, 'Prospects');
-    renderLeadTable(dealContainer, deals, 'Deals');
+    renderLeadTable(leadContainer, leads, 'leads');
+    renderLeadTable(prospectContainer, prospects, 'prospects');
+    renderLeadTable(dealContainer, allDeals, 'deals');
 }
 
-function renderLeadTable(container, data, type) {
-    if (data.length === 0) {
-        container.innerHTML = `<div class="empty-state">Belum ada data ${type} untuk periode ini</div>`;
+function renderLeadTable(container, data, dataKey) {
+    if (!data || data.length === 0) {
+        container.innerHTML = `<div class="empty-state">Belum ada data ${dataKey} untuk periode ini</div>`;
         return;
     }
-    const mapping = CONFIG.dataMapping[type] || CONFIG.dataMapping['Leads'];
+    const mapping = CONFIG.dataMapping[dataKey] || CONFIG.dataMapping['leads']; // Fallback for deals
+    if (!mapping) {
+        container.innerHTML = `<div class="empty-state">Konfigurasi tabel tidak ditemukan.</div>`;
+        return;
+    }
     const headers = mapping.headers;
-    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>${data.slice().reverse().map(item => mapping.rowGenerator(item, type)).join('')}</tbody></table>`;
+    const rowGenerator = window[mapping.rowGenerator];
+    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>${data.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
-function generateSimpleRow(item, dataKey) {
-    const mapping = Object.values(CONFIG.dataMapping).find(m => m.dataKey === dataKey);
-    if (!mapping) return '';
+function generateSimpleRow(item, dataKey, mapping) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
-    const mainValue = item[Object.keys(item)[1]] || ''; // Ambil nilai dari kolom kedua sebagai nilai utama
+    const mainValue = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
@@ -420,18 +428,18 @@ function generateSimpleRow(item, dataKey) {
         </tr>`;
 }
 
-function generateLeadRow(item, type) {
+function generateLeadRow(item, dataKey, mapping) {
     const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
     let actionButton = '-';
 
-    if (type === 'Leads' || type === 'Prospects') {
+    if (dataKey === 'leads' || dataKey === 'prospects') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
     
     return `
-        <tr onclick="openDetailModal('${item.id}', '${type}')">
+        <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
             <td>${item.customerName || ''}</td>
             <td>${item.product || ''}</td>
@@ -448,7 +456,7 @@ function generateLeadRow(item, type) {
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
-    const lead = allLeadsAndProspects.find(l => l.id === leadId);
+    const lead = allLeadsAndProspects.find(l => l && l.id === leadId);
 
     if (!lead || !modal) {
         showMessage('Data untuk diupdate tidak ditemukan.', 'error');
@@ -480,28 +488,20 @@ function closeDetailModal() {
     document.getElementById('detailModal')?.classList.remove('active');
 }
 
-function openDetailModal(itemId, type) {
+function openDetailModal(itemId, dataKey) {
     const allData = Object.values(currentData).flat();
     const item = allData.find(d => d && d.id === itemId);
-
-    let mappingKey;
-    if (type === 'Leads' || type === 'Prospects' || type === 'Deals') {
-        mappingKey = 'Leads';
-    } else {
-        const foundMapping = Object.values(CONFIG.dataMapping).find(m => m.dataKey === type);
-        mappingKey = Object.keys(CONFIG.dataMapping).find(key => CONFIG.dataMapping[key] === foundMapping);
-    }
-    
-    const mapping = CONFIG.dataMapping[mappingKey];
+    const mapping = CONFIG.dataMapping[dataKey];
 
     if (!item || !mapping) {
-        console.error("Data atau mapping tidak ditemukan:", itemId, type);
+        console.error("Data atau mapping tidak ditemukan:", itemId, dataKey);
         return;
     }
 
     const modal = document.getElementById('detailModal');
     const modalTitle = document.getElementById('detailModalTitle');
     const modalBody = document.getElementById('detailModalBody');
+    if(!modal || !modalTitle || !modalBody) return;
     
     modalTitle.textContent = `Detail Data`;
     modalBody.innerHTML = '';
@@ -545,7 +545,9 @@ function openDetailModal(itemId, type) {
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
-    return (currentData.timeOff || []).some(off => off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
+    const timeOffData = currentData.timeOff || [];
+    if (!Array.isArray(timeOffData)) return false;
+    return timeOffData.some(off => off && off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
 }
 
 function showContentPage(pageId) {
@@ -577,9 +579,6 @@ function setupEventListeners() {
 function initializeApp() {
     if (!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
-    Object.keys(CONFIG.targets).flatMap(p => CONFIG.targets[p]).forEach(t => {
-        currentData.settings[t.id] = true;
-    });
     updateDateTime();
     setInterval(updateDateTime, 60000);
     setupEventListeners();
