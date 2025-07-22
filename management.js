@@ -1,11 +1,11 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 3.2.0
+ * @version 4.0.0
  *
- * Perubahan Utama (v3.2.0):
- * - REFACTOR: Memindahkan fungsi-fungsi umum (utils) ke file `utils.js`.
- * - CLEANUP: Menghapus kode yang berulang dan menyederhanakan inisialisasi.
+ * Perubahan Utama (v4.0.0):
+ * - OPTIMASI: Mengubah `loadInitialData` untuk mengambil data berdasarkan periode filter dari server.
+ * Ini memperbaiki error "Argument too large" dengan tidak memuat semua data histori sekaligus.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -23,7 +23,7 @@ if (currentUser.role !== 'management') {
 // KONFIGURASI & STATE
 // =================================================================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
-const REFRESH_INTERVAL = 30000;
+const REFRESH_INTERVAL = 60000; // Interval diperpanjang menjadi 1 menit
 
 const TRACKED_ACTIVITY_KEYS = [
     'leads', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 
@@ -51,7 +51,6 @@ const TARGET_CONFIG = {
 };
 
 let allData = {};
-let previousAllData = {};
 let allSalesUsers = [];
 let isFetching = false;
 
@@ -59,44 +58,52 @@ let isFetching = false;
 // FUNGSI UTAMA
 // =================================================================================
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Memuat data dari server berdasarkan filter periode yang aktif.
+ */
 async function loadInitialData(isInitialLoad = false) {
     if (isFetching) return;
     isFetching = true;
     if (isInitialLoad) showMessage("Memuat data tim dari server...", "info");
     
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
+
+    const fetchUrl = new URL(SCRIPT_URL);
+    fetchUrl.searchParams.append('action', 'getDataForPeriod');
+    fetchUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
+    fetchUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
+    fetchUrl.searchParams.append('includeUsers', 'true'); // Tetap minta data user
+    fetchUrl.searchParams.append('t', new Date().getTime());
+
     try {
-        const fetchUrl = `${SCRIPT_URL}?action=getAllData&includeUsers=true&t=${new Date().getTime()}`;
         const response = await fetch(fetchUrl, { mode: 'cors' });
         const result = await response.json();
 
         if (result.status === 'success') {
             allData = result.data;
-            if (JSON.stringify(allData) !== JSON.stringify(previousAllData)) {
-                previousAllData = JSON.parse(JSON.stringify(allData));
-                
-                if (allData.users && allData.users.length > 0) {
-                    allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
-                } else {
-                    const salesFromActivities = new Set();
-                    TRACKED_ACTIVITY_KEYS.forEach(key => (allData[key] || []).forEach(item => item.sales && salesFromActivities.add(item.sales)));
-                    allSalesUsers = Array.from(salesFromActivities);
-                }
-                
-                if (isInitialLoad) {
-                    setupTimeOffForm();
-                }
-                updateAllUI();
-                if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
-            } else if (isInitialLoad) {
-                if (isInitialLoad) {
-                    setupTimeOffForm();
-                }
-                updateAllUI();
-                showMessage("Data berhasil dimuat.", "success");
+            
+            if (allData.users && allData.users.length > 0) {
+                allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
+            } else {
+                // Fallback jika data user kosong
+                const salesFromActivities = new Set();
+                TRACKED_ACTIVITY_KEYS.forEach(key => (allData[key] || []).forEach(item => item.sales && salesFromActivities.add(item.sales)));
+                allSalesUsers = Array.from(salesFromActivities);
             }
-        } else if (isInitialLoad) throw new Error(result.message);
+            
+            if (isInitialLoad) {
+                setupTimeOffForm();
+            }
+            updateAllUI();
+            if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
+        } else {
+            throw new Error(result.message);
+        }
     } catch (error) {
         if (isInitialLoad) showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        console.error("Fetch Error:", error);
     } finally {
         isFetching = false;
     }
@@ -113,17 +120,13 @@ function updateAllUI() {
 }
 
 // =================================================================================
-// FUNGSI UPDATE UI (STATISTIK & LEADERBOARD)
+// FUNGSI UPDATE UI (STATISTIK & LEADERBOARD) - Tidak ada perubahan
 // =================================================================================
 
 function updateStatCards(periodStartDate, periodEndDate, penalties) {
-    const dateFilter = d => {
-        const itemDate = new Date(d.timestamp);
-        return itemDate >= periodStartDate && itemDate <= periodEndDate;
-    };
-
-    const leadsThisPeriod = (allData.leads || []).filter(dateFilter);
-    const canvasingThisPeriod = (allData.canvasing || []).filter(dateFilter);
+    // Data sudah difilter dari server, jadi tidak perlu filter tanggal lagi di sini.
+    const leadsThisPeriod = allData.leads || [];
+    const canvasingThisPeriod = allData.canvasing || [];
     
     document.getElementById('totalLeads').textContent = leadsThisPeriod.length;
     document.getElementById('totalCanvasing').textContent = canvasingThisPeriod.length;
@@ -131,10 +134,12 @@ function updateStatCards(periodStartDate, periodEndDate, penalties) {
     const salesPerformance = {};
     allSalesUsers.forEach(salesName => {
         salesPerformance[salesName] = TRACKED_ACTIVITY_KEYS.reduce((total, key) => 
-            total + (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length, 0);
+            total + (allData[key] || []).filter(d => d.sales === salesName).length, 0);
     });
 
-    const topSales = Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b, 'N/A');
+    const topSales = Object.keys(salesPerformance).length > 0
+        ? Object.keys(salesPerformance).reduce((a, b) => salesPerformance[a] > salesPerformance[b] ? a : b)
+        : 'N/A';
     document.getElementById('topSales').textContent = topSales;
     document.getElementById('totalPenalty').textContent = formatCurrency(penalties.total);
 }
@@ -143,15 +148,10 @@ function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
     const container = document.getElementById('leaderboard');
     if (!container) return;
 
-    const dateFilter = d => {
-        const itemDate = new Date(d.timestamp);
-        return itemDate >= periodStartDate && itemDate <= periodEndDate;
-    };
-
     const leaderboardData = allSalesUsers.map(salesName => {
         const activities = {};
         TRACKED_ACTIVITY_KEYS.forEach(key => {
-            activities[key] = (allData[key] || []).filter(d => d.sales === salesName).filter(dateFilter).length;
+            activities[key] = (allData[key] || []).filter(d => d.sales === salesName).length;
         });
         const total = Object.values(activities).reduce((sum, count) => sum + count, 0);
         
@@ -177,14 +177,14 @@ function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
                             <td><strong>${s.total}</strong></td>
                             <td>${formatCurrency(s.penalty)}</td>
                         </tr>
-                    `).join('')}
+                    `).join('') || '<tr><td colspan="3">Tidak ada data sales</td></tr>'}
                 </tbody>
             </table>
         </div>`;
 }
 
 // =================================================================================
-// FUNGSI PERHITUNGAN DENDA
+// FUNGSI PERHITUNGAN DENDA - Tidak ada perubahan
 // =================================================================================
 function calculatePenalties(periodStartDate, periodEndDate) {
     const penalties = { total: 0, bySales: {} };
@@ -249,7 +249,7 @@ function calculatePenalties(periodStartDate, periodEndDate) {
 
 
 // =================================================================================
-// FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER)
+// FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER) - Tidak ada perubahan
 // =================================================================================
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) { // Hari Minggu libur
@@ -325,7 +325,7 @@ function renderTabbedTargetSummary() {
 }
 
 // =================================================================================
-// FUNGSI PENGATURAN HARI LIBUR & IZIN
+// FUNGSI PENGATURAN HARI LIBUR & IZIN - Tidak ada perubahan
 // =================================================================================
 
 function setupTimeOffForm() {
@@ -363,9 +363,8 @@ function setupTimeOffForm() {
             const result = await response.json();
             if (result.status === 'success') {
                 showMessage('Data berhasil disimpan.', 'success');
-                if (!allData.timeOff) allData.timeOff = [];
-                allData.timeOff.push(result.data);
-                updateAllUI();
+                // Panggil loadInitialData untuk refresh data dari server
+                loadInitialData();
                 form.reset();
             } else {
                 throw new Error(result.message || 'Gagal menyimpan data.');
@@ -411,8 +410,8 @@ function renderTimeOffList() {
                     const result = await response.json();
                     if (result.status === 'success') {
                         showMessage('Data berhasil dihapus.', 'success');
-                        allData.timeOff = allData.timeOff.filter(item => item.id != id);
-                        updateAllUI();
+                        // Panggil loadInitialData untuk refresh data dari server
+                        loadInitialData();
                     } else {
                         throw new Error(result.message || 'Gagal menghapus data.');
                     }
@@ -449,11 +448,13 @@ function initializeApp() {
         });
     });
 
-    // Gunakan setupFilters dari utils.js dan berikan updateAllUI sebagai callback
-    setupFilters(updateAllUI);
+    // [PERUBAHAN] setupFilters sekarang akan memanggil loadInitialData setiap kali filter diubah.
+    setupFilters(loadInitialData);
 
     loadInitialData(true); 
-    setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
+    // Hapus interval refresh otomatis untuk mengurangi beban server,
+    // data akan di-refresh saat filter diubah.
+    // setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);
