@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* CSS yang sudah ada tidak perlu diubah */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-20); margin-bottom: var(--space-32); }
         .stat-card { background-color: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-20); border: 1px solid var(--color-card-border); box-shadow: var(--shadow-sm); }
         .stat-card h3 { font-size: var(--font-size-md); color: var(--color-text-secondary); margin-bottom: var(--space-8); }
@@ -36,11 +35,7 @@
         .main-content { flex-grow: 1; margin-left: 260px; margin-top: 60px; padding: var(--space-24); }
         .content-page { display: none; }
         .content-page.active { display: block; }
-        [data-color-scheme="dark"] .off-day {
-            background-color: var(--color-charcoal-700) !important;
-        }
-
-        /* CSS untuk Pengaturan KPI */
+        [data-color-scheme="dark"] .off-day { background-color: var(--color-charcoal-700) !important; }
         .admin-settings-grid { display: grid; gap: var(--space-12); }
         .setting-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-12); background-color: var(--color-secondary); border-radius: var(--radius-base); }
         .setting-info { flex: 1; }
@@ -52,6 +47,12 @@
         .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .toggle-slider { background-color: var(--color-primary); }
         input:checked + .toggle-slider:before { transform: translateX(24px); }
+        /* [NEW] Validation Center Styles */
+        #validationCenter .card { margin-bottom: var(--space-24); }
+        .validation-table { width: 100%; border-collapse: collapse; }
+        .validation-table th, .validation-table td { padding: var(--space-12); text-align: left; border-bottom: 1px solid var(--color-border); }
+        .validation-table th { background-color: var(--color-secondary); }
+        .validation-actions { display: flex; gap: var(--space-8); }
     </style>
 </head>
 <body>
@@ -59,10 +60,7 @@
         <header class="app-header">
             <div class="header-content">
                 <h1>Management Dashboard - <span id="userDisplayName"></span></h1>
-                <div class="header-actions">
-                    <span id="currentDateTime"></span>
-                    <button id="logoutBtn" class="btn btn--outline btn--sm">Logout</button>
-                </div>
+                <div class="header-actions"><span id="currentDateTime"></span><button id="logoutBtn" class="btn btn--outline btn--sm">Logout</button></div>
             </div>
         </header>
 
@@ -73,20 +71,16 @@
                         <h3>Menu</h3>
                         <ul class="nav-list">
                             <li><a href="#" data-page="mainDashboard" class="nav-link active">Dashboard</a></li>
+                            <!-- [NEW] Menu Validasi -->
+                            <li><a href="#" data-page="validationCenter" class="nav-link">Pusat Validasi <span id="pendingCountBadge" class="status status--warning" style="display:none; margin-left: 8px;"></span></a></li>
                             <li><a href="#" data-page="timeOffSettings" class="nav-link">Pengaturan Libur</a></li>
                             <li><a href="#" data-page="kpiSettings" class="nav-link">Pengaturan KPI</a></li>
                         </ul>
                     </div>
                     <div class="nav-section">
                         <h3>Filter Periode</h3>
-                        <div class="form-group" style="padding: 0 var(--space-12);">
-                            <label for="yearFilter" class="form-label">Tahun</label>
-                            <select id="yearFilter" class="form-control" style="width: 100%;"></select>
-                        </div>
-                        <div class="form-group" style="padding: 0 var(--space-12);">
-                            <label for="periodFilter" class="form-label">Periode</label>
-                            <select id="periodFilter" class="form-control" style="width: 100%;"></select>
-                        </div>
+                        <div class="form-group" style="padding: 0 var(--space-12);"><label for="yearFilter" class="form-label">Tahun</label><select id="yearFilter" class="form-control" style="width: 100%;"></select></div>
+                        <div class="form-group" style="padding: 0 var(--space-12);"><label for="periodFilter" class="form-label">Periode</label><select id="periodFilter" class="form-control" style="width: 100%;"></select></div>
                     </div>
                 </div>
             </nav>
@@ -96,13 +90,15 @@
                 <div id="mainDashboard" class="content-page active">
                     <div class="page-header"><h2>Ringkasan Kinerja Tim</h2></div>
                     <div class="stats-grid">
-                        <div class="stat-card"><h3>Total Leads</h3><p class="value" id="totalLeads">0</p></div>
-                        <div class="stat-card"><h3>Total Canvasing</h3><p class="value" id="totalCanvasing">0</p></div>
-                        <div class="stat-card"><h3>Sales Terbaik</h3><p class="value" id="topSales">N/A</p></div>
-                        <div class="stat-card"><h3>Total Denda Tim</h3><p class="value" id="totalPenalty">Rp 0</p></div>
+                        <div class="stat-card"><h3>Total Leads (Approved)</h3><p class="value" id="totalLeads">0</p></div>
+                        <div class="stat-card"><h3>Total Canvasing (Approved)</h3><p class="value" id="totalCanvasing">0</p></div>
+                        <div class="stat-card"><h3>Sales Terbaik (Approved)</h3><p class="value" id="topSales">N/A</p></div>
+                        <div class="stat-card"><h3>Total Denda Tim (Final)</h3><p class="value" id="totalPenalty">Rp 0</p></div>
                     </div>
+                    <!-- [NEW] Kartu status validasi tim -->
+                    <div class="card" style="margin-bottom: var(--space-24);"><div class="card__body"><h3>Status Validasi Data Tim</h3><div id="teamValidationBreakdown"></div></div></div>
                     <div class="dashboard-layout">
-                        <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
+                        <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales (Berdasarkan Data Approved)</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
                         <div class="card">
                             <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
                             <div class="card__body">
@@ -114,47 +110,25 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Halaman 2: Pengaturan Hari Libur & Izin -->
-                <div id="timeOffSettings" class="content-page">
-                    <div class="page-header"><h2>Pengaturan Hari Libur & Izin</h2></div>
-                    <div class="card">
-                        <div class="card__body">
-                            <div class="time-off-container">
-                                <form id="timeOffForm" class="time-off-form">
-                                    <div class="form-group">
-                                        <label for="timeOffDate" class="form-label">Tanggal</label>
-                                        <input type="date" id="timeOffDate" class="form-control" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="timeOffSales" class="form-label">Untuk Sales</label>
-                                        <select id="timeOffSales" class="form-control" required></select>
-                                    </div>
-                                    <button type="submit" class="btn btn--primary">Simpan</button>
-                                </form>
-                                <div class="time-off-list">
-                                    <h4>Daftar Tanggal Tersimpan</h4>
-                                    <ul id="timeOffListContainer"></ul>
-                                </div>
-                            </div>
-                        </div>
+                
+                <!-- [NEW] Halaman 2: Pusat Validasi -->
+                <div id="validationCenter" class="content-page">
+                    <div class="page-header"><h2>Pusat Validasi Data</h2><button id="refreshValidationBtn" class="btn btn--secondary">Refresh Data</button></div>
+                    <div id="validationContainer">
+                        <p>Memuat data yang perlu divalidasi...</p>
                     </div>
                 </div>
 
-                <!-- Halaman 3: Pengaturan KPI -->
+                <!-- Halaman 3: Pengaturan Hari Libur & Izin -->
+                <div id="timeOffSettings" class="content-page">
+                    <div class="page-header"><h2>Pengaturan Hari Libur & Izin</h2></div>
+                    <div class="card"><div class="card__body"><div class="time-off-container"><form id="timeOffForm" class="time-off-form"><div class="form-group"><label for="timeOffDate" class="form-label">Tanggal</label><input type="date" id="timeOffDate" class="form-control" required></div><div class="form-group"><label for="timeOffSales" class="form-label">Untuk Sales</label><select id="timeOffSales" class="form-control" required></select></div><button type="submit" class="btn btn--primary">Simpan</button></form><div class="time-off-list"><h4>Daftar Tanggal Tersimpan</h4><ul id="timeOffListContainer"></ul></div></div></div></div>
+                </div>
+
+                <!-- Halaman 4: Pengaturan KPI -->
                 <div id="kpiSettings" class="content-page">
                     <div class="page-header"><h2>Pengaturan Target KPI Aktif</h2></div>
-                    <div class="card">
-                        <div class="card__body">
-                            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">
-                                Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard. Perubahan akan langsung berlaku.
-                            </p>
-                            <div id="kpiSettingsContainer" class="admin-settings-grid">
-                                <!-- Pengaturan KPI akan dirender di sini oleh JavaScript -->
-                                <div style="padding: 24px; text-align: center;">Memuat pengaturan...</div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="card"><div class="card__body"><p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard. Perubahan akan langsung berlaku.</p><div id="kpiSettingsContainer" class="admin-settings-grid"><div style="padding: 24px; text-align: center;">Memuat pengaturan...</div></div></div></div>
                 </div>
             </main>
         </div>
