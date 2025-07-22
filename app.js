@@ -1,11 +1,10 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 6.1.0
+ * @version 6.2.0
  *
- * Perubahan Utama (v6.1.0):
- * - FIX: Memfilter data di tab agar tidak menampilkan data yang sudah maju ke tahap selanjutnya.
- * (Contoh: Deal tidak akan muncul di tab Prospect).
+ * Perubahan Utama (v6.2.0):
+ * - FIX: Memperbaiki bug di mana update status dari tab Prospect tidak berfungsi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -180,6 +179,10 @@ async function handleFormSubmit(e) {
     sendData('saveData', payload, e);
 }
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Mencari data lead di semua sumber yang relevan (leads dan prospects).
+ */
 function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
@@ -187,17 +190,28 @@ function handleUpdateLead(e) {
     const newStatus = form.querySelector('#updateStatus').value;
     const statusLog = form.querySelector('#statusLog').value;
     
-    // Cari lead dari data asli di sheet 'Leads'
-    const leadData = (currentData.leads || []).find(lead => lead.id === leadId);
+    // Gabungkan data dari leads dan prospects untuk menemukan data asli
+    const allLeadsAndProspects = [
+        ...(currentData.leads || []),
+        ...(currentData.prospects || [])
+    ];
+    const leadData = allLeadsAndProspects.find(item => item.id === leadId);
+
     if (!leadData) {
-        showMessage('Data lead tidak ditemukan!', 'error');
+        showMessage('Data asli untuk diupdate tidak ditemukan!', 'error');
         return;
     }
+
+    // Ambil ID asli dari sheet 'Leads', meskipun update dari tab 'Prospect'
+    const originalLeadId = leadData.id.startsWith('prospect_') 
+        ? leadData.id.replace('prospect_', 'item_') 
+        : leadData.id;
+
     const payload = {
-        leadId,
+        leadId: originalLeadId, // Kirim ID asli dari sheet 'Leads'
         newStatus,
         statusLog,
-        leadData
+        leadData // Kirim data lengkap untuk disalin
     };
     sendData('updateLeadStatus', payload, e);
 }
@@ -339,10 +353,6 @@ function updateSimpleSummaryTable(sheetName, mapping) {
     container.innerHTML = tableHTML;
 }
 
-/**
- * [FUNGSI DIPERBARUI]
- * Memfilter data untuk setiap tab agar tidak tumpang tindih.
- */
 function updateLeadTabs() {
     const leadContainer = document.getElementById('leadContent');
     const prospectContainer = document.getElementById('prospectContent');
@@ -358,17 +368,10 @@ function updateLeadTabs() {
         ...(currentData.dealLainnya || [])
     ];
 
-    // Buat daftar ID unik dari prospect dan deal untuk memfilter
-    const prospectIds = new Set(allProspects.map(p => p.id.replace('prospect_', 'item_')));
     const dealIds = new Set(allDeals.map(d => d.id.replace('deal_', 'item_')));
 
-    // 1. Tab Lead: Hanya tampilkan data dari sheet 'Leads' yang statusnya 'Lead'
     const leads = allLeads.filter(item => item.status === 'Lead');
-    
-    // 2. Tab Prospect: Tampilkan data dari sheet 'Prospects' yang ID-nya TIDAK ADA di daftar deal
     const prospects = allProspects.filter(p => !dealIds.has(p.id.replace('prospect_', 'item_')));
-
-    // 3. Tab Deal: Tampilkan semua data deal
     const deals = allDeals;
 
     renderLeadTable(leadContainer, leads, 'Lead');
@@ -399,7 +402,6 @@ function generateLeadRow(item, statusType) {
     const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
     let actionButton = '-';
 
-    // Tombol Update hanya untuk status Lead dan Prospect
     if (statusType === 'Lead' || statusType === 'Prospect') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
@@ -417,7 +419,6 @@ function generateLeadRow(item, statusType) {
 
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
-    // Cari di data leads dan prospects untuk menemukan item yang akan diupdate
     const allLeadsAndProspects = [
         ...(currentData.leads || []),
         ...(currentData.prospects || [])
