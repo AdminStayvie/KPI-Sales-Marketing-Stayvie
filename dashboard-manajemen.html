@@ -47,12 +47,23 @@
         .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .toggle-slider { background-color: var(--color-primary); }
         input:checked + .toggle-slider:before { transform: translateX(24px); }
-        /* [NEW] Validation Center Styles */
         #validationCenter .card { margin-bottom: var(--space-24); }
         .validation-table { width: 100%; border-collapse: collapse; }
         .validation-table th, .validation-table td { padding: var(--space-12); text-align: left; border-bottom: 1px solid var(--color-border); }
         .validation-table th { background-color: var(--color-secondary); }
         .validation-actions { display: flex; gap: var(--space-8); }
+
+        /* [NEW] CSS untuk Modal Detail */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background-color: var(--color-surface); padding: var(--space-24); border-radius: var(--radius-lg); width: 90%; max-width: 600px; box-shadow: var(--shadow-lg); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-16); padding-bottom: var(--space-16); border-bottom: 1px solid var(--color-border); }
+        .modal-header h3 { margin: 0; color: var(--color-primary); }
+        .close-button { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--color-text); }
+        .detail-list { display: grid; grid-template-columns: 150px 1fr; gap: var(--space-12); }
+        .detail-list dt { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
+        .detail-list dd { margin: 0; word-break: break-word; }
+        .detail-list dd a { color: var(--color-primary); }
     </style>
 </head>
 <body>
@@ -71,7 +82,6 @@
                         <h3>Menu</h3>
                         <ul class="nav-list">
                             <li><a href="#" data-page="mainDashboard" class="nav-link active">Dashboard</a></li>
-                            <!-- [NEW] Menu Validasi -->
                             <li><a href="#" data-page="validationCenter" class="nav-link">Pusat Validasi <span id="pendingCountBadge" class="status status--warning" style="display:none; margin-left: 8px;"></span></a></li>
                             <li><a href="#" data-page="timeOffSettings" class="nav-link">Pengaturan Libur</a></li>
                             <li><a href="#" data-page="kpiSettings" class="nav-link">Pengaturan KPI</a></li>
@@ -95,7 +105,6 @@
                         <div class="stat-card"><h3>Sales Terbaik (Approved)</h3><p class="value" id="topSales">N/A</p></div>
                         <div class="stat-card"><h3>Total Denda Tim (Final)</h3><p class="value" id="totalPenalty">Rp 0</p></div>
                     </div>
-                    <!-- [NEW] Kartu status validasi tim -->
                     <div class="card" style="margin-bottom: var(--space-24);"><div class="card__body"><h3>Status Validasi Data Tim</h3><div id="teamValidationBreakdown"></div></div></div>
                     <div class="dashboard-layout">
                         <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales (Berdasarkan Data Approved)</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
@@ -111,12 +120,10 @@
                     </div>
                 </div>
                 
-                <!-- [NEW] Halaman 2: Pusat Validasi -->
+                <!-- Halaman 2: Pusat Validasi -->
                 <div id="validationCenter" class="content-page">
                     <div class="page-header"><h2>Pusat Validasi Data</h2><button id="refreshValidationBtn" class="btn btn--secondary">Refresh Data</button></div>
-                    <div id="validationContainer">
-                        <p>Memuat data yang perlu divalidasi...</p>
-                    </div>
+                    <div id="validationContainer"><p>Memuat data yang perlu divalidasi...</p></div>
                 </div>
 
                 <!-- Halaman 3: Pengaturan Hari Libur & Izin -->
@@ -131,6 +138,19 @@
                     <div class="card"><div class="card__body"><p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard. Perubahan akan langsung berlaku.</p><div id="kpiSettingsContainer" class="admin-settings-grid"><div style="padding: 24px; text-align: center;">Memuat pengaturan...</div></div></div></div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- [NEW] Modal untuk Detail Data di Halaman Manajemen -->
+    <div id="managementDetailModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="managementDetailModalTitle">Detail Data</h3>
+                <button class="close-button" onclick="closeDetailModal()">&times;</button>
+            </div>
+            <div id="managementDetailModalBody">
+                <!-- Detail content will be injected here by JavaScript -->
+            </div>
         </div>
     </div>
     
