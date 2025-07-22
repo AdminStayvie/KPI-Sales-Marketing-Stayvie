@@ -1,15 +1,11 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 3.9.0
+ * @version 4.0.0
  *
- * Perubahan Utama (v3.9.0):
- * - FITUR: Menambahkan kolom "Bukti Lead" pada form input lead.
- * - BUG FIX: Memperbaiki logika `handleFormSubmit` untuk dapat memproses upload file (seperti "Bukti Lead") dengan mengubahnya menjadi Base64. Perbaikan ini juga berlaku untuk semua form lain yang memiliki input file.
- *
- * Perubahan Sebelumnya:
- * - REFACTOR: Mengganti nama variabel 'updateNotes' menjadi 'statusLog'.
- * - BUG FIX: Menghapus link aktif dari dalam tabel rekap.
+ * Perubahan Utama (v4.0.0):
+ * - OPTIMASI: Mengubah `loadInitialData` untuk mengambil data berdasarkan periode filter dari server,
+ * bukan mengambil semua data sekaligus. Ini memperbaiki error "Argument too large".
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -67,68 +63,23 @@ const CONFIG = {
                 datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan'
             }
         },
-        'Promosi': { 
-            dataKey: 'promosi', 
-            headers: ['Waktu', 'Campaign', 'Platform'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>`,
-            detailLabels: {
-                datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot'
-            }
-        },
-        'DoorToDoor': { 
-            dataKey: 'doorToDoor', 
-            headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti' } 
-        },
-        'Quotations': { 
-            dataKey: 'quotations', 
-            headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan' } 
-        },
-        'Surveys': { 
-            dataKey: 'surveys', 
-            headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi' } 
-        },
-        'Reports': { 
-            dataKey: 'reports', 
-            headers: ['Waktu', 'Periode', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.reportDoc ? 'Ada File' : 'N/A'}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } 
-        },
-        'CRMSurveys': { 
-            dataKey: 'crmSurveys', 
-            headers: ['Waktu', 'Kompetitor', 'Website'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } 
-        },
-        'Conversions': { 
-            dataKey: 'conversions', 
-            headers: ['Waktu', 'Event', 'Client', 'Tanggal'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian' } 
-        },
-        'Events': { 
-            dataKey: 'events', 
-            headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi' } 
-        },
-        'Campaigns': { 
-            dataKey: 'campaigns', 
-            headers: ['Waktu', 'Judul', 'Periode', 'Budget'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, 
-            detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } 
-        },
+        // ... (sisa konfigurasi dataMapping tidak perlu diubah)
+        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot' }},
+        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti' } },
+        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan' } },
+        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi' } },
+        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.reportDoc ? 'Ada File' : 'N/A'}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } },
+        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } },
+        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian' } },
+        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi' } },
+        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } },
     }
 };
 
 // --- STATE APLIKASI ---
 let currentData = { settings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
+let isFetchingData = false;
 
 
 // =================================================================================
@@ -155,7 +106,7 @@ async function sendData(action, payloadData, event) {
         const result = await response.json();
         if (result.status === 'success') {
             showMessage('Data berhasil diproses!', 'success');
-            await loadInitialData(); // Muat ulang semua data
+            await loadInitialData(); // Muat ulang semua data sesuai filter saat ini
             if (event) event.target.reset();
             closeModal();
         } else {
@@ -171,32 +122,58 @@ async function sendData(action, payloadData, event) {
     }
 }
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Memuat data dari server berdasarkan filter periode yang aktif.
+ */
 async function loadInitialData() {
-    showMessage("Memuat data dari server...", "info");
-    try {
-        const response = await fetch(`${SCRIPT_URL}?action=getAllData&includeUsers=true`, { mode: 'cors' });
-        const result = await response.json();
-        if (result.status === 'success') {
-            const allKeys = new Set(Object.keys(currentData));
-            Object.values(CONFIG.dataMapping).forEach(map => allKeys.add(map.dataKey));
-            allKeys.add('timeOff');
+    if (isFetchingData) return;
+    isFetchingData = true;
 
-            for (const key of allKeys) {
+    showMessage("Memuat data dari server...", "info");
+
+    // Ambil tanggal dari filter
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
+
+    // Buat URL dengan parameter baru
+    const fetchUrl = new URL(SCRIPT_URL);
+    fetchUrl.searchParams.append('action', 'getDataForPeriod');
+    fetchUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
+    fetchUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
+    fetchUrl.searchParams.append('salesName', currentUser.name); // Kirim nama sales yang login
+
+    try {
+        const response = await fetch(fetchUrl, { mode: 'cors' });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            // Bersihkan data lama sebelum diisi data baru
+            Object.keys(currentData).forEach(key => {
+                if (key !== 'settings') {
+                    currentData[key] = [];
+                }
+            });
+
+            // Isi dengan data baru yang sudah difilter dari server
+            for (const key in result.data) {
                 currentData[key] = result.data[key] || [];
             }
             
             showMessage("Data berhasil dimuat.", "success");
-            updateAllUI();
+            updateAllUI(); // Perbarui seluruh UI dengan data baru
         } else {
             throw new Error(result.message);
         }
     } catch (error) {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+    } finally {
+        isFetchingData = false;
     }
 }
 
 // =================================================================================
-// FORM HANDLING
+// FORM HANDLING (Tidak ada perubahan di sini)
 // =================================================================================
 function toBase64(file) {
     return new Promise((resolve, reject) => {
@@ -215,16 +192,13 @@ async function handleFormSubmit(e) {
 
     const formData = new FormData(form);
     const data = {};
-    // Loop through form entries to separate files from other data
     for (const [key, value] of formData.entries()) {
         if (value instanceof File && value.size > 0) {
-            // If it's a file, we'll process it later
             continue;
         }
         data[key] = value;
     }
 
-    // Process all file inputs in the form
     const fileInputs = form.querySelectorAll('input[type="file"]');
     for (const fileInput of fileInputs) {
         if (fileInput.files.length > 0) {
@@ -275,37 +249,30 @@ function handleUpdateLead(e) {
 }
 
 // =================================================================================
-// KALKULASI & UPDATE UI
+// KALKULASI & UPDATE UI (Tidak ada perubahan signifikan di sini)
+// Logika ini sekarang akan berjalan di atas data yang sudah difilter, jadi lebih cepat.
 // =================================================================================
 
 function updateAllUI() {
-    const periodStartDate = getPeriodStartDate();
-    const periodEndDate = getPeriodEndDate();
-    updateDashboard(periodStartDate, periodEndDate);
-    updateAllSummaries(periodStartDate, periodEndDate);
-    calculateAndDisplayPenalties(periodStartDate, periodEndDate);
+    // Fungsi ini tidak perlu tahu tanggal lagi, karena `currentData` sudah berisi data yang benar
+    updateDashboard();
+    updateAllSummaries();
+    calculateAndDisplayPenalties();
 }
 
-function getFilteredData(dataType, periodStartDate, periodEndDate) {
-    const data = currentData[dataType] || [];
-    const userFilteredData = data.filter(d => d.sales === currentUser.name);
-    
-    if (periodStartDate && periodEndDate) {
-        return userFilteredData.filter(d => {
-            const itemDate = new Date(d.timestamp);
-            return itemDate >= periodStartDate && itemDate <= periodEndDate;
-        });
-    }
-    return userFilteredData;
+function getFilteredData(dataType) {
+    // Fungsi ini disederhanakan, karena data dari server sudah difilter
+    // berdasarkan user dan periode.
+    return currentData[dataType] || [];
 }
 
-function calculateAchievementForTarget(target, periodStartDate, periodEndDate) {
+function calculateAchievementForTarget(target) {
     if (!target.dataKey || !target.dateField) return 0;
-    const data = getFilteredData(target.dataKey, periodStartDate, periodEndDate);
+    const data = getFilteredData(target.dataKey);
     return data.length;
 }
 
-function updateDashboard(periodStartDate, periodEndDate) {
+function updateDashboard() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const achievements = { daily: 0, weekly: 0, monthly: 0 };
     const totals = { daily: 0, weekly: 0, monthly: 0 };
@@ -314,7 +281,7 @@ function updateDashboard(periodStartDate, periodEndDate) {
         CONFIG.targets[period].forEach(target => {
             if (!currentData.settings[target.id]) currentData.settings[target.id] = true;
             if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target, periodStartDate, periodEndDate);
+                const achieved = calculateAchievementForTarget(target);
                 achievements[period] += achieved;
                 totals[period] += target.target;
             }
@@ -322,12 +289,16 @@ function updateDashboard(periodStartDate, periodEndDate) {
         updateProgressBar(period, achievements[period], totals[period]);
     });
 
-    updateTargetBreakdown(periodStartDate, periodEndDate);
+    updateTargetBreakdown();
 }
 
-function calculateAndDisplayPenalties(periodStartDate, periodEndDate) {
+function calculateAndDisplayPenalties() {
     const penaltyElement = document.getElementById('totalPenalty');
     if (!penaltyElement) return;
+
+    // Perhitungan denda sekarang menggunakan data yang sudah difilter periode
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
 
     const today = new Date();
     if (periodEndDate > today) {
@@ -351,20 +322,23 @@ function calculateAndDisplayPenalties(periodStartDate, periodEndDate) {
     CONFIG.targets.weekly.forEach(target => {
         sundaysInPeriod.forEach(sunday => {
             const weekStart = getWeekStart(sunday);
-            const achievedThisWeek = getFilteredData(target.dataKey, weekStart, sunday).length;
+            const achievedThisWeek = getFilteredData(target.dataKey).filter(d => {
+                const itemDate = new Date(d.timestamp);
+                return itemDate >= weekStart && itemDate <= sunday;
+            }).length;
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
         });
     });
     
     CONFIG.targets.monthly.forEach(target => {
-        const achievedThisMonth = getFilteredData(target.dataKey, periodStartDate, periodEndDate).length;
+        const achievedThisMonth = getFilteredData(target.dataKey).length;
         if (achievedThisMonth < target.target) totalPenalty += target.penalty;
     });
 
     penaltyElement.textContent = formatCurrency(totalPenalty);
 }
 
-function updateTargetBreakdown(periodStartDate, periodEndDate) {
+function updateTargetBreakdown() {
     const container = document.getElementById('targetBreakdown');
     if (!container) return;
     container.innerHTML = '';
@@ -376,7 +350,7 @@ function updateTargetBreakdown(periodStartDate, periodEndDate) {
 
         CONFIG.targets[period].forEach(target => {
             if (currentData.settings[target.id]) {
-                const achieved = calculateAchievementForTarget(target, periodStartDate, periodEndDate);
+                const achieved = calculateAchievementForTarget(target);
                 const status = achieved >= target.target ? 'completed' : 'pending';
                 container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
             }
@@ -392,21 +366,21 @@ function updateProgressBar(type, achieved, total) {
     document.getElementById(`${type}Total`).textContent = total;
 }
 
-function updateAllSummaries(periodStartDate, periodEndDate) {
+function updateAllSummaries() {
     for (const sheetName in CONFIG.dataMapping) {
         const mapping = CONFIG.dataMapping[sheetName];
         if (mapping.headers) {
-            updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate);
+            updateSummaryTable(sheetName, mapping);
         }
     }
 }
 
-function updateSummaryTable(sheetName, mapping, periodStartDate, periodEndDate) {
+function updateSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    const dataToDisplay = getFilteredData(mapping.dataKey, periodStartDate, periodEndDate);
+    const dataToDisplay = getFilteredData(mapping.dataKey);
 
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
@@ -426,7 +400,7 @@ function generateLeadRow(item, dataKey) {
 }
 
 // =================================================================================
-// FUNGSI MODAL
+// FUNGSI MODAL (Tidak ada perubahan)
 // =================================================================================
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
@@ -533,6 +507,7 @@ function closeDetailModal() {
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
+    // Gunakan data timeOff dari server
     return (currentData.timeOff || []).some(off => 
         off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
     );
@@ -561,9 +536,10 @@ function initializeApp() {
     setInterval(updateDateTime, 60000);
     
     setupEventListeners();
-    setupFilters(updateAllUI); 
+    // [PERUBAHAN] setupFilters sekarang akan memanggil loadInitialData setiap kali filter diubah.
+    setupFilters(loadInitialData); 
     
-    loadInitialData();
+    loadInitialData(); // Memuat data awal saat aplikasi pertama kali dibuka.
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);
