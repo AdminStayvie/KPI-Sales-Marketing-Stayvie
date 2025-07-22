@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.1.0 - Perbaikan Stabilitas dan Penanganan Error.
+ * @version 7.2.0 - Memperbaiki bug case-sensitive pada perhitungan validasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -38,7 +38,6 @@ const CONFIG = {
         ]
     },
     dataMapping: {
-        // Kunci utama adalah dataKey dari target
         'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
@@ -204,13 +203,18 @@ function updateAllUI() {
     }
 }
 
-function getFilteredData(dataType, validationFilter = ['Approved']) {
+/**
+ * [FUNGSI DIPERBARUI]
+ * Filter data berdasarkan status validasi (case-insensitive).
+ */
+function getFilteredData(dataType, validationFilter = ['approved']) {
     const data = currentData[dataType] || [];
     if (!Array.isArray(data)) return [];
-    if (validationFilter.includes('All')) {
+    if (validationFilter.includes('all')) {
         return data;
     }
-    return data.filter(item => item && validationFilter.includes(item.validationStatus));
+    const lowerCaseFilter = validationFilter.map(f => f.toLowerCase());
+    return data.filter(item => item && item.validationStatus && lowerCaseFilter.includes(item.validationStatus.toLowerCase()));
 }
 
 function calculateAchievementForTarget(target, validationFilter) {
@@ -228,7 +232,7 @@ function updateDashboard() {
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['Approved']);
+                const achieved = calculateAchievementForTarget(target, ['approved']);
                 achievements[period] += achieved;
                 totals[period] += target.target;
             }
@@ -243,10 +247,10 @@ function calculateAndDisplayPenalties() {
     const finalPenaltyEl = document.getElementById('finalPenalty');
     if (!potentialPenaltyEl || !finalPenaltyEl) return;
 
-    const potentialPenalty = calculatePenaltyForValidationStatus(['Approved', 'Pending']);
+    const potentialPenalty = calculatePenaltyForValidationStatus(['approved', 'pending']);
     potentialPenaltyEl.textContent = formatCurrency(potentialPenalty);
 
-    const finalPenalty = calculatePenaltyForValidationStatus(['Approved']);
+    const finalPenalty = calculatePenaltyForValidationStatus(['approved']);
     finalPenaltyEl.textContent = formatCurrency(finalPenalty);
 }
 
@@ -309,7 +313,7 @@ function updateTargetBreakdown() {
         container.appendChild(header);
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['Approved']);
+                const achieved = calculateAchievementForTarget(target, ['approved']);
                 const status = achieved >= target.target ? 'completed' : 'pending';
                 container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
             }
@@ -317,20 +321,25 @@ function updateTargetBreakdown() {
     });
 }
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Menghitung status validasi (case-insensitive).
+ */
 function updateValidationBreakdown() {
     const container = document.getElementById('validationBreakdown');
     if (!container) return;
 
     let total = 0, approved = 0, pending = 0, rejected = 0;
-    Object.values(CONFIG.dataMapping).forEach(map => {
-        const data = currentData[map.dataKey] || [];
+    Object.keys(CONFIG.dataMapping).forEach(dataKey => {
+        const data = currentData[dataKey] || [];
         if (Array.isArray(data)) {
             data.forEach(item => {
-                if(item) {
+                if(item && item.validationStatus) {
                     total++;
-                    if (item.validationStatus === 'Approved') approved++;
-                    else if (item.validationStatus === 'Pending') pending++;
-                    else if (item.validationStatus === 'Rejected') rejected++;
+                    const status = item.validationStatus.toLowerCase();
+                    if (status === 'approved') approved++;
+                    else if (status === 'pending') pending++;
+                    else if (status === 'rejected') rejected++;
                 }
             });
         }
@@ -371,7 +380,7 @@ function updateAllSummaries() {
 }
 
 function updateSimpleSummaryTable(dataKey, mapping, container) {
-    const dataToDisplay = getFilteredData(dataKey, ['All']);
+    const dataToDisplay = getFilteredData(dataKey, ['all']);
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
@@ -405,7 +414,7 @@ function renderLeadTable(container, data, dataKey) {
         container.innerHTML = `<div class="empty-state">Belum ada data ${dataKey} untuk periode ini</div>`;
         return;
     }
-    const mapping = CONFIG.dataMapping[dataKey] || CONFIG.dataMapping['leads']; // Fallback for deals
+    const mapping = CONFIG.dataMapping[dataKey] || CONFIG.dataMapping['leads'];
     if (!mapping) {
         container.innerHTML = `<div class="empty-state">Konfigurasi tabel tidak ditemukan.</div>`;
         return;
