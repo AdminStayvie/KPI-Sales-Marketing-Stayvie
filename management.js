@@ -1,11 +1,11 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 4.0.0
+ * @version 4.1.0
  *
- * Perubahan Utama (v4.0.0):
- * - OPTIMASI: Mengubah `loadInitialData` untuk mengambil data berdasarkan periode filter dari server.
- * Ini memperbaiki error "Argument too large" dengan tidak memuat semua data histori sekaligus.
+ * Perubahan Utama (v4.1.0):
+ * - BUG FIX: Memperbaiki logika `calculatePenalties` agar menghitung denda harian/mingguan
+ * untuk hari/minggu yang sudah lewat di dalam periode yang sedang berjalan.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -23,7 +23,7 @@ if (currentUser.role !== 'management') {
 // KONFIGURASI & STATE
 // =================================================================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
-const REFRESH_INTERVAL = 60000; // Interval diperpanjang menjadi 1 menit
+const REFRESH_INTERVAL = 60000;
 
 const TRACKED_ACTIVITY_KEYS = [
     'leads', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 
@@ -54,14 +54,6 @@ let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
 
-// =================================================================================
-// FUNGSI UTAMA
-// =================================================================================
-
-/**
- * [FUNGSI DIPERBARUI]
- * Memuat data dari server berdasarkan filter periode yang aktif.
- */
 async function loadInitialData(isInitialLoad = false) {
     if (isFetching) return;
     isFetching = true;
@@ -74,7 +66,7 @@ async function loadInitialData(isInitialLoad = false) {
     fetchUrl.searchParams.append('action', 'getDataForPeriod');
     fetchUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
     fetchUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
-    fetchUrl.searchParams.append('includeUsers', 'true'); // Tetap minta data user
+    fetchUrl.searchParams.append('includeUsers', 'true');
     fetchUrl.searchParams.append('t', new Date().getTime());
 
     try {
@@ -87,7 +79,6 @@ async function loadInitialData(isInitialLoad = false) {
             if (allData.users && allData.users.length > 0) {
                 allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
             } else {
-                // Fallback jika data user kosong
                 const salesFromActivities = new Set();
                 TRACKED_ACTIVITY_KEYS.forEach(key => (allData[key] || []).forEach(item => item.sales && salesFromActivities.add(item.sales)));
                 allSalesUsers = Array.from(salesFromActivities);
@@ -119,12 +110,7 @@ function updateAllUI() {
     renderTimeOffList();
 }
 
-// =================================================================================
-// FUNGSI UPDATE UI (STATISTIK & LEADERBOARD) - Tidak ada perubahan
-// =================================================================================
-
 function updateStatCards(periodStartDate, periodEndDate, penalties) {
-    // Data sudah difilter dari server, jadi tidak perlu filter tanggal lagi di sini.
     const leadsThisPeriod = allData.leads || [];
     const canvasingThisPeriod = allData.canvasing || [];
     
@@ -183,25 +169,27 @@ function updateLeaderboard(periodStartDate, periodEndDate, penalties) {
         </div>`;
 }
 
-// =================================================================================
-// FUNGSI PERHITUNGAN DENDA - Tidak ada perubahan
-// =================================================================================
+/**
+ * [FUNGSI DIPERBARUI] Menghitung denda untuk hari/minggu yang sudah lewat.
+ */
 function calculatePenalties(periodStartDate, periodEndDate) {
     const penalties = { total: 0, bySales: {} };
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    if (periodEndDate > today) {
+    const datesToCheck = getDatesForPeriod().filter(date => date < today);
+
+    if (today < periodStartDate) {
         return penalties;
     }
 
     allSalesUsers.forEach(salesName => {
         penalties.bySales[salesName] = 0;
-        const periodDates = getDatesForPeriod();
 
         // Cek Denda Harian
         TARGET_CONFIG.daily.forEach(target => {
             let missedDays = 0;
-            periodDates.forEach(date => {
+            datesToCheck.forEach(date => {
                 if (!isDayOff(date, salesName)) {
                     const achievedToday = (allData[target.dataKey] || []).filter(d => 
                         d.sales === salesName && new Date(d.timestamp).toDateString() === date.toDateString()
@@ -214,8 +202,8 @@ function calculatePenalties(periodStartDate, periodEndDate) {
             penalties.bySales[salesName] += missedDays * target.penalty;
         });
 
-        // Cek Denda Mingguan untuk setiap minggu
-        const sundaysInPeriod = periodDates.filter(date => date.getDay() === 0);
+        // Cek Denda Mingguan
+        const sundaysInPeriod = datesToCheck.filter(date => date.getDay() === 0);
         TARGET_CONFIG.weekly.forEach(target => {
             let missedWeeks = 0;
             sundaysInPeriod.forEach(sunday => {
@@ -232,29 +220,25 @@ function calculatePenalties(periodStartDate, periodEndDate) {
             penalties.bySales[salesName] += missedWeeks * target.penalty;
         });
 
-        // Cek Denda Bulanan
-        TARGET_CONFIG.monthly.forEach(target => {
-            const achievedThisPeriod = (allData[target.dataKey] || []).filter(d => 
-                d.sales === salesName && new Date(d.timestamp) >= periodStartDate && new Date(d.timestamp) <= periodEndDate
-            ).length;
-            if (achievedThisPeriod < target.target) {
-                penalties.bySales[salesName] += target.penalty;
-            }
-        });
+        // Cek Denda Bulanan (hanya jika periode sudah selesai)
+        if (today > periodEndDate) {
+            TARGET_CONFIG.monthly.forEach(target => {
+                const achievedThisPeriod = (allData[target.dataKey] || []).filter(d => 
+                    d.sales === salesName && new Date(d.timestamp) >= periodStartDate && new Date(d.timestamp) <= periodEndDate
+                ).length;
+                if (achievedThisPeriod < target.target) {
+                    penalties.bySales[salesName] += target.penalty;
+                }
+            });
+        }
     });
 
     penalties.total = Object.values(penalties.bySales).reduce((sum, p) => sum + p, 0);
     return penalties;
 }
 
-
-// =================================================================================
-// FUNGSI LAPORAN KINERJA RINCI (TABEL KALENDER) - Tidak ada perubahan
-// =================================================================================
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) { // Hari Minggu libur
-        return true;
-    }
+    if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
     return (allData.timeOff || []).some(off => 
         off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
@@ -297,7 +281,7 @@ function renderTabbedTargetSummary() {
                             const achievedToday = dataForTarget.filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
                             cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                         }
-                    } else if (period === 'weekly' && date.getDay() === 0) { // Minggu
+                    } else if (period === 'weekly' && date.getDay() === 0) {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = dataForTarget.filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
@@ -323,10 +307,6 @@ function renderTabbedTargetSummary() {
         });
     });
 }
-
-// =================================================================================
-// FUNGSI PENGATURAN HARI LIBUR & IZIN - Tidak ada perubahan
-// =================================================================================
 
 function setupTimeOffForm() {
     const form = document.getElementById('timeOffForm');
@@ -363,7 +343,6 @@ function setupTimeOffForm() {
             const result = await response.json();
             if (result.status === 'success') {
                 showMessage('Data berhasil disimpan.', 'success');
-                // Panggil loadInitialData untuk refresh data dari server
                 loadInitialData();
                 form.reset();
             } else {
@@ -410,7 +389,6 @@ function renderTimeOffList() {
                     const result = await response.json();
                     if (result.status === 'success') {
                         showMessage('Data berhasil dihapus.', 'success');
-                        // Panggil loadInitialData untuk refresh data dari server
                         loadInitialData();
                     } else {
                         throw new Error(result.message || 'Gagal menghapus data.');
@@ -422,10 +400,6 @@ function renderTimeOffList() {
         });
     });
 }
-
-// =================================================================================
-// FUNGSI UTILITY & INISIALISASI
-// =================================================================================
 
 function showContentPage(pageId) {
     document.querySelectorAll('.content-page').forEach(page => page.classList.remove('active'));
@@ -448,13 +422,9 @@ function initializeApp() {
         });
     });
 
-    // [PERUBAHAN] setupFilters sekarang akan memanggil loadInitialData setiap kali filter diubah.
     setupFilters(loadInitialData);
 
     loadInitialData(true); 
-    // Hapus interval refresh otomatis untuk mengurangi beban server,
-    // data akan di-refresh saat filter diubah.
-    // setInterval(() => loadInitialData(false), REFRESH_INTERVAL);
 }
 
 document.addEventListener('DOMContentLoaded', initializeApp);
