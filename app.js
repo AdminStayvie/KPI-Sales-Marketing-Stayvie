@@ -1,17 +1,23 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 5.0.0
+ * @version 6.0.0
  *
- * Perubahan Utama (v5.0.0):
- * - UPDATE: Perhitungan denda sekarang hanya menghitung KPI yang aktif berdasarkan
- * pengaturan dari dashboard manajemen.
+ * Perubahan Utama (v6.0.0):
+ * - FITUR: Mengubah tampilan rekap leads menjadi 3 tab (Lead, Prospect, Deal) untuk keterbacaan.
+ * - FIX: Memastikan timestamp yang ditampilkan untuk Prospect dan Deal adalah waktu konversi, bukan waktu input awal.
  */
 
+// --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 const currentUserJSON = localStorage.getItem('currentUser');
 if (!currentUserJSON) { window.location.href = 'index.html'; }
 const currentUser = JSON.parse(currentUserJSON);
+
+// =================================================================================
+// KONFIGURASI TERPUSAT
+// =================================================================================
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
+
 const CONFIG = {
     targets: {
         daily: [
@@ -40,30 +46,23 @@ const CONFIG = {
             dataKey: 'leads', 
             headers: ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'], 
             rowGenerator: generateLeadRow,
-            detailLabels: {
-                timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead',
-                product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead',
-                notes: 'Catatan Awal', status: 'Status',
-                statusLog: 'Log Status'
-            }
+            detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status', statusLog: 'Log Status' }
         },
         'Canvasing': { 
             dataKey: 'canvasing', 
             headers: ['Waktu', 'Judul Meeting', 'File'], 
-            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.document ? 'Ada File' : 'N/A'}</td></tr>`,
-            detailLabels: {
-                datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan'
-            }
+            rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.meetingTitle || ''}</td><td>${item.document ? 'Ada File' : 'N/A'}</td></tr>`,
+            detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan' }
         },
-        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot' }},
-        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti' } },
-        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan' } },
-        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi' } },
-        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.reportDoc ? 'Ada File' : 'N/A'}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } },
-        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } },
-        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian' } },
-        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi' } },
-        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } },
+        'Promosi': { dataKey: 'promosi', headers: ['Waktu', 'Campaign', 'Platform'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignName || ''}</td><td>${item.platform || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot' }},
+        'DoorToDoor': { dataKey: 'doorToDoor', headers: ['Waktu', 'Tanggal', 'Instansi', 'PIC'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.visitDate)}</td><td>${item.institutionName || ''}</td><td>${item.picName || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti' } },
+        'Quotations': { dataKey: 'quotations', headers: ['Waktu', 'Customer', 'Produk', 'Nominal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.productType || ''}</td><td>${formatCurrency(item.quotationAmount)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan' } },
+        'Surveys': { dataKey: 'surveys', headers: ['Waktu', 'Tgl Survey', 'Customer', 'Asal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${formatDate(item.surveyDate)}</td><td>${item.customerName || ''}</td><td>${item.origin || ''}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi' } },
+        'Reports': { dataKey: 'reports', headers: ['Waktu', 'Periode', 'File'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.reportPeriod || ''}</td><td>${item.reportDoc ? 'Ada File' : 'N/A'}</td></tr>`, detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan' } },
+        'CRMSurveys': { dataKey: 'crmSurveys', headers: ['Waktu', 'Kompetitor', 'Website'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.competitorName || ''}</td><td>${item.website ? 'Ada Link' : '-'}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga' } },
+        'Conversions': { dataKey: 'conversions', headers: ['Waktu', 'Event', 'Client', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.clientName || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian' } },
+        'Events': { dataKey: 'events', headers: ['Waktu', 'Nama Event', 'Jenis', 'Tanggal'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.eventName || ''}</td><td>${item.eventType || ''}</td><td>${formatDate(item.eventDate)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi' } },
+        'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } },
     }
 };
 let currentData = { settings: {}, kpiSettings: {} };
@@ -112,7 +111,12 @@ async function sendData(action, payloadData, event) {
         button.disabled = true;
     }
     try {
-        const response = await fetch(SCRIPT_URL, { method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payloadData }) });
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, ...payloadData })
+        });
         if (!response.ok) throw new Error(`Server merespons dengan status: ${response.status}`);
         const result = await response.json();
         if (result.status === 'success') {
@@ -157,7 +161,11 @@ async function handleFormSubmit(e) {
     for (const fileInput of fileInputs) {
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
-            data[fileInput.name] = { fileName: file.name, mimeType: file.type, data: await toBase64(file) };
+            data[fileInput.name] = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
         }
     }
     data.id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -183,7 +191,12 @@ function handleUpdateLead(e) {
         showMessage('Data lead tidak ditemukan!', 'error');
         return;
     }
-    const payload = { leadId, newStatus, statusLog, leadData };
+    const payload = {
+        leadId,
+        newStatus,
+        statusLog,
+        leadData
+    };
     sendData('updateLeadStatus', payload, e);
 }
 
@@ -205,10 +218,17 @@ function calculateAchievementForTarget(target) {
 
 function updateDashboard() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
-    const achievements = { daily: 0, weekly: 0, monthly: 0 };
-    const totals = { daily: 0, weekly: 0, monthly: 0 };
+    const achievements = {
+        daily: 0,
+        weekly: 0,
+        monthly: 0
+    };
+    const totals = {
+        daily: 0,
+        weekly: 0,
+        monthly: 0
+    };
     const kpiSettings = currentData.kpiSettings || {};
-
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
@@ -219,24 +239,23 @@ function updateDashboard() {
         });
         updateProgressBar(period, achievements[period], totals[period]);
     });
-
     updateTargetBreakdown();
 }
 
 function calculateAndDisplayPenalties() {
     const penaltyElement = document.getElementById('totalPenalty');
     if (!penaltyElement) return;
-
     let totalPenalty = 0;
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
     const kpiSettings = currentData.kpiSettings || {};
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
-    if (today < periodStartDate) { penaltyElement.textContent = formatCurrency(0); return; }
-
+    if (today < periodStartDate) {
+        penaltyElement.textContent = formatCurrency(0);
+        return;
+    }
     CONFIG.targets.daily.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         datesToCheck.forEach(date => {
@@ -246,17 +265,18 @@ function calculateAndDisplayPenalties() {
             }
         });
     });
-
     const sundaysInPeriod = datesToCheck.filter(date => date.getDay() === 0);
     CONFIG.targets.weekly.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         sundaysInPeriod.forEach(sunday => {
             const weekStart = getWeekStart(sunday);
-            const achievedThisWeek = getFilteredData(target.dataKey).filter(d => { const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= sunday; }).length;
+            const achievedThisWeek = getFilteredData(target.dataKey).filter(d => {
+                const itemDate = new Date(d.timestamp);
+                return itemDate >= weekStart && itemDate <= sunday;
+            }).length;
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
         });
     });
-    
     if (today > periodEndDate) {
         CONFIG.targets.monthly.forEach(target => {
             if (kpiSettings[target.id] === false) return;
@@ -264,7 +284,6 @@ function calculateAndDisplayPenalties() {
             if (achievedThisMonth < target.target) totalPenalty += target.penalty;
         });
     }
-
     penaltyElement.textContent = formatCurrency(totalPenalty);
 }
 
@@ -273,12 +292,10 @@ function updateTargetBreakdown() {
     if (!container) return;
     container.innerHTML = '';
     const kpiSettings = currentData.kpiSettings || {};
-    
     ['daily', 'weekly', 'monthly'].forEach(period => {
         const header = document.createElement('h4');
         header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
         container.appendChild(header);
-
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
                 const achieved = calculateAchievementForTarget(target);
@@ -298,15 +315,16 @@ function updateProgressBar(type, achieved, total) {
 }
 
 function updateAllSummaries() {
+    updateLeadTabs();
     for (const sheetName in CONFIG.dataMapping) {
         const mapping = CONFIG.dataMapping[sheetName];
-        if (mapping.headers) {
-            updateSummaryTable(sheetName, mapping);
+        if (sheetName !== 'Leads' && mapping.headers) {
+            updateSimpleSummaryTable(sheetName, mapping);
         }
     }
 }
 
-function updateSummaryTable(sheetName, mapping) {
+function updateSimpleSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -319,15 +337,71 @@ function updateSummaryTable(sheetName, mapping) {
     container.innerHTML = tableHTML;
 }
 
-function generateLeadRow(item, dataKey) {
-    const statusClass = item.status ? item.status.toLowerCase().replace(/\s+/g, '-') : 'lead';
-    const updateButton = (item.status || 'Lead') !== 'Lost' ? `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>` : '-';
-    return `<tr onclick="openDetailModal('${dataKey}', '${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'Lead'}</span></td><td>${updateButton}</td></tr>`;
+function updateLeadTabs() {
+    const leadContainer = document.getElementById('leadContent');
+    const prospectContainer = document.getElementById('prospectContent');
+    const dealContainer = document.getElementById('dealContent');
+
+    if (!leadContainer || !prospectContainer || !dealContainer) return;
+
+    const leads = (currentData.leads || []).filter(item => item.status === 'Lead');
+    const prospects = (currentData.prospects || []);
+    const deals = [
+        ...(currentData.b2bBookings || []),
+        ...(currentData.venueBookings || []),
+        ...(currentData.dealLainnya || [])
+    ];
+
+    renderLeadTable(leadContainer, leads, 'Lead');
+    renderLeadTable(prospectContainer, prospects, 'Prospect');
+    renderLeadTable(dealContainer, deals, 'Deal');
+}
+
+function renderLeadTable(container, data, statusType) {
+    if (data.length === 0) {
+        container.innerHTML = `<div class="empty-state">Belum ada data ${statusType} untuk periode ini</div>`;
+        return;
+    }
+
+    const headers = ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'];
+    const tableHTML = `
+        <table>
+            <thead>
+                <tr><th>${headers.join('</th><th>')}</th></tr>
+            </thead>
+            <tbody>
+                ${data.slice().reverse().map(item => generateLeadRow(item, statusType)).join('')}
+            </tbody>
+        </table>`;
+    container.innerHTML = tableHTML;
+}
+
+function generateLeadRow(item, statusType) {
+    const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
+    let actionButton = '-';
+
+    if (statusType === 'Lead' || statusType === 'Prospect') {
+        actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
+    }
+    
+    return `
+        <tr onclick="openDetailModal('${item.id}')">
+            <td>${item.datestamp || ''}</td>
+            <td>${item.customerName || ''}</td>
+            <td>${item.leadSource || ''}</td>
+            <td>${item.product || ''}</td>
+            <td><span class="status status--${statusClass}">${item.status || 'N/A'}</span></td>
+            <td>${actionButton}</td>
+        </tr>`;
 }
 
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
-    const lead = currentData.leads.find(l => l.id === leadId);
+    const allLeads = [
+        ...(currentData.leads || []),
+        ...(currentData.prospects || [])
+    ];
+    const lead = allLeads.find(l => l.id === leadId);
     if (!lead || !modal) return;
     document.getElementById('updateLeadId').value = lead.id;
     document.getElementById('modalCustomerName').textContent = lead.customerName;
@@ -356,56 +430,71 @@ function closeModal() {
     }
 }
 
-function openDetailModal(dataKey, itemId) {
-    const mapping = Object.values(CONFIG.dataMapping).find(m => m.dataKey === dataKey);
-    const item = currentData[dataKey]?.find(d => d.id === itemId);
-    if (!item || !mapping) {
-        console.error("Data atau mapping tidak ditemukan:", dataKey, itemId);
-        return;
-    }
-    const modal = document.getElementById('detailModal');
-    const modalTitle = document.getElementById('detailModalTitle');
-    const modalBody = document.getElementById('detailModalBody');
-    modalTitle.textContent = `Detail ${mapping.headers[1] || 'Data'}`;
-    modalBody.innerHTML = '';
-    const detailList = document.createElement('dl');
-    detailList.className = 'detail-list';
-    const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
-    for (const key in mapping.detailLabels) {
-        if (Object.prototype.hasOwnProperty.call(item, key) && item[key]) {
-            const dt = document.createElement('dt');
-            dt.textContent = mapping.detailLabels[key];
-            const dd = document.createElement('dd');
-            let value = item[key];
-            if (dateFields.includes(key)) {
-                value = formatDate(value);
-            } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
-                value = formatCurrency(value);
-            } else if (typeof value === 'object' && value.hasOwnProperty('fileUrl')) {
-                dd.innerHTML = `<a href="${value.fileUrl}" target="_blank" rel="noopener noreferrer">${value.fileName || 'Lihat File'}</a>`;
-                detailList.appendChild(dt);
-                detailList.appendChild(dd);
-                continue;
-            } else if (typeof value === 'string' && (value.startsWith('http') || value.startsWith('blob'))) {
-                dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
-                detailList.appendChild(dt);
-                detailList.appendChild(dd);
-                continue;
-            }
-            dd.textContent = value;
-            detailList.appendChild(dt);
-            detailList.appendChild(dd);
-        }
-    }
-    modalBody.appendChild(detailList);
-    modal.classList.add('active');
-}
-
 function closeDetailModal() {
     const modal = document.getElementById('detailModal');
     if (modal) {
         modal.classList.remove('active');
     }
+}
+
+function openDetailModal(itemId) {
+    const allLeadData = [
+        ...(currentData.leads || []),
+        ...(currentData.prospects || []),
+        ...(currentData.b2bBookings || []),
+        ...(currentData.venueBookings || []),
+        ...(currentData.dealLainnya || [])
+    ];
+
+    const item = allLeadData.find(d => d.id === itemId);
+    const mapping = CONFIG.dataMapping['Leads'];
+
+    if (!item || !mapping) {
+        console.error("Data atau mapping tidak ditemukan:", itemId);
+        return;
+    }
+
+    const modal = document.getElementById('detailModal');
+    const modalTitle = document.getElementById('detailModalTitle');
+    const modalBody = document.getElementById('detailModalBody');
+    
+    modalTitle.textContent = `Detail Customer`;
+    modalBody.innerHTML = '';
+
+    const detailList = document.createElement('dl');
+    detailList.className = 'detail-list';
+
+    const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
+
+    for (const key in mapping.detailLabels) {
+        if (Object.prototype.hasOwnProperty.call(item, key) && item[key]) {
+            const dt = document.createElement('dt');
+            dt.textContent = mapping.detailLabels[key];
+            
+            const dd = document.createElement('dd');
+            let value = item[key];
+
+            if (key === 'timestamp') {
+                value = item.datestamp;
+            } else if (dateFields.includes(key)) {
+                value = formatDate(value);
+            } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
+                value = formatCurrency(value);
+            } else if (typeof value === 'string' && (value.startsWith('http'))) {
+                 dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
+                detailList.appendChild(dt);
+                detailList.appendChild(dd);
+                continue;
+            }
+            
+            dd.textContent = value;
+            detailList.appendChild(dt);
+            detailList.appendChild(dd);
+        }
+    }
+    
+    modalBody.appendChild(detailList);
+    modal.classList.add('active');
 }
 
 function isDayOff(date, salesName) {
@@ -425,15 +514,29 @@ function showContentPage(pageId) {
 
 function setupEventListeners() {
     document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
-    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => { e.preventDefault(); showContentPage(link.getAttribute('data-page')); }));
+    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showContentPage(link.getAttribute('data-page'));
+    }));
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
+    
+    document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#leadTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
 }
 
 function initializeApp() {
     if (!currentUser) return;
     document.body.setAttribute('data-role', currentUser.role);
-    Object.keys(CONFIG.targets).flatMap(p => CONFIG.targets[p]).forEach(t => { currentData.settings[t.id] = true; });
+    Object.keys(CONFIG.targets).flatMap(p => CONFIG.targets[p]).forEach(t => {
+        currentData.settings[t.id] = true;
+    });
     updateDateTime();
     setInterval(updateDateTime, 60000);
     setupEventListeners();
