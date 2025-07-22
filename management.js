@@ -1,11 +1,10 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 5.0.0
+ * @version 5.1.0
  *
- * Perubahan Utama (v5.0.0):
- * - FITUR: Menambahkan halaman dan logika untuk mengaktifkan/menonaktifkan target KPI.
- * - UPDATE: Perhitungan denda sekarang hanya menghitung KPI yang aktif.
+ * Perubahan Utama (v5.1.0):
+ * - FIX: Memastikan target 'Konversi Lead Menjadi Prospek' konsisten.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -14,11 +13,11 @@ const currentUser = JSON.parse(currentUserJSON);
 if (currentUser.role !== 'management') { alert('Akses ditolak. Halaman ini hanya untuk manajemen.'); window.location.href = 'dashboard.html'; }
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
 const REFRESH_INTERVAL = 60000;
-const TRACKED_ACTIVITY_KEYS = ['leads', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'];
+const TRACKED_ACTIVITY_KEYS = ['leads', 'prospects', 'canvasing', 'promosi', 'doorToDoor', 'quotations', 'surveys', 'reports', 'crmSurveys', 'conversions', 'events', 'campaigns'];
 const TARGET_CONFIG = {
     daily: [
         { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads' },
-        { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects' },
+        { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects' }, // <-- Konsisten dengan app.js
         { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi' }
     ],
     weekly: [
@@ -41,6 +40,7 @@ let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
 
+// ... Sisa kode tidak ada perubahan, salin dari versi sebelumnya ...
 async function loadInitialData(isInitialLoad = false) {
     if (isFetching) return;
     isFetching = true;
