@@ -1285,3 +1285,83 @@ input:checked + .toggle-slider:before {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
+
+/* Tambahkan ini di akhir file style.css Anda */
+
+/* Status Validasi di Tabel */
+.status--pending {
+  background-color: rgba(var(--color-warning-rgb), var(--status-bg-opacity));
+  color: var(--color-warning);
+  border: 1px solid rgba(var(--color-warning-rgb), var(--status-border-opacity));
+}
+
+.status--approved {
+  background-color: rgba(var(--color-success-rgb), var(--status-bg-opacity));
+  color: var(--color-success);
+  border: 1px solid rgba(var(--color-success-rgb), var(--status-border-opacity));
+}
+
+.status--rejected {
+  background-color: rgba(var(--color-error-rgb), var(--status-bg-opacity));
+  color: var(--color-error);
+  border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity));
+}
+
+/* Kartu Ringkasan Validasi di Dashboard Sales */
+.validation-stats {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-16);
+    padding: var(--space-8);
+}
+
+.validation-stats .stat-item {
+    text-align: center;
+    padding: var(--space-8) var(--space-16);
+    border-radius: var(--radius-base);
+}
+
+.validation-stats .stat-item strong {
+    display: block;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+}
+
+.validation-stats .stat-item.approved { color: var(--color-success); }
+.validation-stats .stat-item.pending { color: var(--color-warning); }
+.validation-stats .stat-item.rejected { color: var(--color-error); }
+.validation-stats .stat-item.total { color: var(--color-text-secondary); }
+
+
+/* Pusat Validasi di Dashboard Manajemen */
+#validationCenter .card {
+    margin-bottom: var(--space-24);
+}
+
+.validation-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.validation-table th,
+.validation-table td {
+    padding: var(--space-12);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.validation-table th {
+    background-color: var(--color-secondary);
+}
+
+.validation-actions {
+    display: flex;
+    gap: var(--space-8);
+}
+
+.validation-actions .btn--sm {
+    padding: var(--space-4) var(--space-8);
+}
