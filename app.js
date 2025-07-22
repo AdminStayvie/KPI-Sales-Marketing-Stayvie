@@ -179,10 +179,6 @@ async function handleFormSubmit(e) {
     sendData('saveData', payload, e);
 }
 
-/**
- * [FUNGSI DIPERBARUI]
- * Mencari data lead di semua sumber yang relevan (leads dan prospects).
- */
 function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
@@ -190,7 +186,6 @@ function handleUpdateLead(e) {
     const newStatus = form.querySelector('#updateStatus').value;
     const statusLog = form.querySelector('#statusLog').value;
     
-    // Gabungkan data dari leads dan prospects untuk menemukan data asli
     const allLeadsAndProspects = [
         ...(currentData.leads || []),
         ...(currentData.prospects || [])
@@ -202,16 +197,15 @@ function handleUpdateLead(e) {
         return;
     }
 
-    // Ambil ID asli dari sheet 'Leads', meskipun update dari tab 'Prospect'
     const originalLeadId = leadData.id.startsWith('prospect_') 
         ? leadData.id.replace('prospect_', 'item_') 
         : leadData.id;
 
     const payload = {
-        leadId: originalLeadId, // Kirim ID asli dari sheet 'Leads'
+        leadId: originalLeadId,
         newStatus,
         statusLog,
-        leadData // Kirim data lengkap untuk disalin
+        leadData
     };
     sendData('updateLeadStatus', payload, e);
 }
