@@ -1,13 +1,10 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.0.0
+ * @version 6.2.0
  *
- * Perubahan Utama (v7.0.0):
- * - FITUR: Rekap data lead (Lead, Prospect, Deal) sekarang menampilkan semua data historis
- * dan tidak terpengaruh oleh filter periode.
- * - UPDATE: `loadInitialData` sekarang mengambil 2 set data: satu terfilter periode (untuk KPI)
- * dan satu lagi data lengkap (untuk rekap lead).
+ * Perubahan Utama (v6.2.0):
+ * - FIX: Memperbaiki bug di mana update status dari tab Prospect tidak berfungsi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -67,46 +64,35 @@ const CONFIG = {
         'Campaigns': { dataKey: 'campaigns', headers: ['Waktu', 'Judul', 'Periode', 'Budget'], rowGenerator: (item, dataKey) => `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.campaignTitle || ''}</td><td>${formatDate(item.campaignStartDate)} - ${formatDate(item.campaignEndDate)}</td><td>${formatCurrency(item.budget)}</td></tr>`, detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi' } },
     }
 };
-
-let currentPeriodData = {}; 
-let allTimeLeadData = {}; 
+let currentData = { settings: {}, kpiSettings: {} };
+Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
 
 async function loadInitialData() {
     if (isFetchingData) return;
     isFetchingData = true;
     showMessage("Memuat data dari server...", "info");
-
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
-
-    const periodUrl = new URL(SCRIPT_URL);
-    periodUrl.searchParams.append('action', 'getDataForPeriod');
-    periodUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
-    periodUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
-    periodUrl.searchParams.append('salesName', currentUser.name);
-
-    const allLeadsUrl = new URL(SCRIPT_URL);
-    allLeadsUrl.searchParams.append('action', 'getAllLeadData');
-    allLeadsUrl.searchParams.append('salesName', currentUser.name);
-
+    const fetchUrl = new URL(SCRIPT_URL);
+    fetchUrl.searchParams.append('action', 'getDataForPeriod');
+    fetchUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
+    fetchUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
+    fetchUrl.searchParams.append('salesName', currentUser.name);
     try {
-        const [periodResponse, allLeadsResponse] = await Promise.all([
-            fetch(periodUrl, { mode: 'cors' }),
-            fetch(allLeadsUrl, { mode: 'cors' })
-        ]);
-
-        const periodResult = await periodResponse.json();
-        const allLeadsResult = await allLeadsResponse.json();
-
-        if (periodResult.status === 'success' && allLeadsResult.status === 'success') {
-            currentPeriodData = periodResult.data || {};
-            allTimeLeadData = allLeadsResult.data || {};
-            
+        const response = await fetch(fetchUrl, { mode: 'cors' });
+        const result = await response.json();
+        if (result.status === 'success') {
+            Object.keys(currentData).forEach(key => {
+                if (key !== 'settings') currentData[key] = [];
+            });
+            for (const key in result.data) {
+                currentData[key] = result.data[key] || [];
+            }
             showMessage("Data berhasil dimuat.", "success");
             updateAllUI();
         } else {
-            throw new Error(periodResult.message || allLeadsResult.message || 'Gagal mengambil data');
+            throw new Error(result.message);
         }
     } catch (error) {
         showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
@@ -201,8 +187,8 @@ function handleUpdateLead(e) {
     const statusLog = form.querySelector('#statusLog').value;
     
     const allLeadsAndProspects = [
-        ...(allTimeLeadData.leads || []),
-        ...(allTimeLeadData.prospects || [])
+        ...(currentData.leads || []),
+        ...(currentData.prospects || [])
     ];
     const leadData = allLeadsAndProspects.find(item => item.id === leadId);
 
@@ -231,7 +217,7 @@ function updateAllUI() {
 }
 
 function getFilteredData(dataType) {
-    return currentPeriodData[dataType] || [];
+    return currentData[dataType] || [];
 }
 
 function calculateAchievementForTarget(target) {
@@ -252,7 +238,7 @@ function updateDashboard() {
         weekly: 0,
         monthly: 0
     };
-    const kpiSettings = currentPeriodData.kpiSettings || {};
+    const kpiSettings = currentData.kpiSettings || {};
     ['daily', 'weekly', 'monthly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] !== false) {
@@ -272,7 +258,7 @@ function calculateAndDisplayPenalties() {
     let totalPenalty = 0;
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
-    const kpiSettings = currentPeriodData.kpiSettings || {};
+    const kpiSettings = currentData.kpiSettings || {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
@@ -315,7 +301,7 @@ function updateTargetBreakdown() {
     const container = document.getElementById('targetBreakdown');
     if (!container) return;
     container.innerHTML = '';
-    const kpiSettings = currentPeriodData.kpiSettings || {};
+    const kpiSettings = currentData.kpiSettings || {};
     ['daily', 'weekly', 'monthly'].forEach(period => {
         const header = document.createElement('h4');
         header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
@@ -339,44 +325,41 @@ function updateProgressBar(type, achieved, total) {
 }
 
 function updateAllSummaries() {
-    updateLeadTabs(allTimeLeadData);
+    updateLeadTabs();
     for (const sheetName in CONFIG.dataMapping) {
         const mapping = CONFIG.dataMapping[sheetName];
         if (sheetName !== 'Leads' && mapping.headers) {
-            updateSimpleSummaryTable(sheetName, mapping, currentPeriodData);
+            updateSimpleSummaryTable(sheetName, mapping);
         }
     }
 }
 
-function updateSimpleSummaryTable(sheetName, mapping, dataSet) {
+function updateSimpleSummaryTable(sheetName, mapping) {
     const containerId = `${mapping.dataKey}Summary`;
     const container = document.getElementById(containerId);
     if (!container) return;
-    
-    const dataToDisplay = dataSet[mapping.dataKey] || [];
-
+    const dataToDisplay = getFilteredData(mapping.dataKey);
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
     }
-
     const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => mapping.rowGenerator(item, mapping.dataKey)).join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
-function updateLeadTabs(dataSet) {
+function updateLeadTabs() {
     const leadContainer = document.getElementById('leadContent');
     const prospectContainer = document.getElementById('prospectContent');
     const dealContainer = document.getElementById('dealContent');
 
     if (!leadContainer || !prospectContainer || !dealContainer) return;
 
-    const allLeads = dataSet.leads || [];
-    const allProspects = dataSet.prospects || [];
+    const allLeads = currentData.leads || [];
+    const allProspects = currentData.prospects || [];
     const allDeals = [
-        ...(dataSet.b2bBookings || []),
-        ...(dataSet.venueBookings || []),
-        ...(dataSet.dealLainnya || [])
+        ...(currentData.b2bBookings || []),
+        ...(currentData.venueBookings || []),
+        ...(currentData.dealLainnya || [])
     ];
 
     const dealIds = new Set(allDeals.map(d => d.id.replace('deal_', 'item_')));
@@ -392,27 +375,50 @@ function updateLeadTabs(dataSet) {
 
 function renderLeadTable(container, data, statusType) {
     if (data.length === 0) {
-        container.innerHTML = `<div class="empty-state">Belum ada data ${statusType}</div>`;
+        container.innerHTML = `<div class="empty-state">Belum ada data ${statusType} untuk periode ini</div>`;
         return;
     }
+
     const headers = ['Waktu', 'Customer', 'Sumber', 'Produk', 'Status', 'Aksi'];
-    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>${data.slice().reverse().map(item => generateLeadRow(item, statusType)).join('')}</tbody></table>`;
+    const tableHTML = `
+        <table>
+            <thead>
+                <tr><th>${headers.join('</th><th>')}</th></tr>
+            </thead>
+            <tbody>
+                ${data.slice().reverse().map(item => generateLeadRow(item, statusType)).join('')}
+            </tbody>
+        </table>`;
     container.innerHTML = tableHTML;
 }
 
 function generateLeadRow(item, statusType) {
     const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
     let actionButton = '-';
+
     if (statusType === 'Lead' || statusType === 'Prospect') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
-    return `<tr onclick="openDetailModal('${item.id}')"><td>${item.datestamp || ''}</td><td>${item.customerName || ''}</td><td>${item.leadSource || ''}</td><td>${item.product || ''}</td><td><span class="status status--${statusClass}">${item.status || 'N/A'}</span></td><td>${actionButton}</td></tr>`;
+    
+    return `
+        <tr onclick="openDetailModal('${item.id}')">
+            <td>${item.datestamp || ''}</td>
+            <td>${item.customerName || ''}</td>
+            <td>${item.leadSource || ''}</td>
+            <td>${item.product || ''}</td>
+            <td><span class="status status--${statusClass}">${item.status || 'N/A'}</span></td>
+            <td>${actionButton}</td>
+        </tr>`;
 }
 
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
-    const allLeadsAndProspects = [...(allTimeLeadData.leads || []), ...(allTimeLeadData.prospects || [])];
+    const allLeadsAndProspects = [
+        ...(currentData.leads || []),
+        ...(currentData.prospects || [])
+    ];
     const lead = allLeadsAndProspects.find(l => l.id === leadId);
+
     if (!lead || !modal) {
         showMessage('Data untuk diupdate tidak ditemukan.', 'error');
         return;
@@ -450,27 +456,42 @@ function closeDetailModal() {
 }
 
 function openDetailModal(itemId) {
-    const allLeadData = [...(allTimeLeadData.leads || []), ...(allTimeLeadData.prospects || []), ...(allTimeLeadData.b2bBookings || []), ...(allTimeLeadData.venueBookings || []), ...(allTimeLeadData.dealLainnya || [])];
+    const allLeadData = [
+        ...(currentData.leads || []),
+        ...(currentData.prospects || []),
+        ...(currentData.b2bBookings || []),
+        ...(currentData.venueBookings || []),
+        ...(currentData.dealLainnya || [])
+    ];
+
     const item = allLeadData.find(d => d.id === itemId);
     const mapping = CONFIG.dataMapping['Leads'];
+
     if (!item || !mapping) {
         console.error("Data atau mapping tidak ditemukan:", itemId);
         return;
     }
+
     const modal = document.getElementById('detailModal');
     const modalTitle = document.getElementById('detailModalTitle');
     const modalBody = document.getElementById('detailModalBody');
+    
     modalTitle.textContent = `Detail Customer`;
     modalBody.innerHTML = '';
+
     const detailList = document.createElement('dl');
     detailList.className = 'detail-list';
+
     const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
+
     for (const key in mapping.detailLabels) {
         if (Object.prototype.hasOwnProperty.call(item, key) && item[key]) {
             const dt = document.createElement('dt');
             dt.textContent = mapping.detailLabels[key];
+            
             const dd = document.createElement('dd');
             let value = item[key];
+
             if (key === 'timestamp') {
                 value = item.datestamp;
             } else if (dateFields.includes(key)) {
@@ -478,16 +499,18 @@ function openDetailModal(itemId) {
             } else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) {
                 value = formatCurrency(value);
             } else if (typeof value === 'string' && (value.startsWith('http'))) {
-                dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
+                 dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
                 detailList.appendChild(dt);
                 detailList.appendChild(dd);
                 continue;
             }
+            
             dd.textContent = value;
             detailList.appendChild(dt);
             detailList.appendChild(dd);
         }
     }
+    
     modalBody.appendChild(detailList);
     modal.classList.add('active');
 }
@@ -495,7 +518,9 @@ function openDetailModal(itemId) {
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
-    return (currentPeriodData.timeOff || []).some(off => off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
+    return (currentData.timeOff || []).some(off => 
+        off.date === dateString && (off.sales === 'Global' || off.sales === salesName)
+    );
 }
 
 function showContentPage(pageId) {
@@ -507,14 +532,13 @@ function showContentPage(pageId) {
 
 function setupEventListeners() {
     document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            showContentPage(link.getAttribute('data-page'));
-        });
-    });
+    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showContentPage(link.getAttribute('data-page'));
+    }));
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
+    
     document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
         button.addEventListener('click', () => {
             document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
