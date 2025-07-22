@@ -1,11 +1,11 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 6.0.0
+ * @version 6.1.0
  *
- * Perubahan Utama (v6.0.0):
- * - FITUR: Mengubah tampilan rekap leads menjadi 3 tab (Lead, Prospect, Deal) untuk keterbacaan.
- * - FIX: Memastikan timestamp yang ditampilkan untuk Prospect dan Deal adalah waktu konversi, bukan waktu input awal.
+ * Perubahan Utama (v6.1.0):
+ * - FIX: Memfilter data di tab agar tidak menampilkan data yang sudah maju ke tahap selanjutnya.
+ * (Contoh: Deal tidak akan muncul di tab Prospect).
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -186,7 +186,9 @@ function handleUpdateLead(e) {
     const leadId = form.querySelector('#updateLeadId').value;
     const newStatus = form.querySelector('#updateStatus').value;
     const statusLog = form.querySelector('#statusLog').value;
-    const leadData = currentData.leads.find(lead => lead.id === leadId);
+    
+    // Cari lead dari data asli di sheet 'Leads'
+    const leadData = (currentData.leads || []).find(lead => lead.id === leadId);
     if (!leadData) {
         showMessage('Data lead tidak ditemukan!', 'error');
         return;
@@ -337,6 +339,10 @@ function updateSimpleSummaryTable(sheetName, mapping) {
     container.innerHTML = tableHTML;
 }
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Memfilter data untuk setiap tab agar tidak tumpang tindih.
+ */
 function updateLeadTabs() {
     const leadContainer = document.getElementById('leadContent');
     const prospectContainer = document.getElementById('prospectContent');
@@ -344,13 +350,26 @@ function updateLeadTabs() {
 
     if (!leadContainer || !prospectContainer || !dealContainer) return;
 
-    const leads = (currentData.leads || []).filter(item => item.status === 'Lead');
-    const prospects = (currentData.prospects || []);
-    const deals = [
+    const allLeads = currentData.leads || [];
+    const allProspects = currentData.prospects || [];
+    const allDeals = [
         ...(currentData.b2bBookings || []),
         ...(currentData.venueBookings || []),
         ...(currentData.dealLainnya || [])
     ];
+
+    // Buat daftar ID unik dari prospect dan deal untuk memfilter
+    const prospectIds = new Set(allProspects.map(p => p.id.replace('prospect_', 'item_')));
+    const dealIds = new Set(allDeals.map(d => d.id.replace('deal_', 'item_')));
+
+    // 1. Tab Lead: Hanya tampilkan data dari sheet 'Leads' yang statusnya 'Lead'
+    const leads = allLeads.filter(item => item.status === 'Lead');
+    
+    // 2. Tab Prospect: Tampilkan data dari sheet 'Prospects' yang ID-nya TIDAK ADA di daftar deal
+    const prospects = allProspects.filter(p => !dealIds.has(p.id.replace('prospect_', 'item_')));
+
+    // 3. Tab Deal: Tampilkan semua data deal
+    const deals = allDeals;
 
     renderLeadTable(leadContainer, leads, 'Lead');
     renderLeadTable(prospectContainer, prospects, 'Prospect');
@@ -380,6 +399,7 @@ function generateLeadRow(item, statusType) {
     const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
     let actionButton = '-';
 
+    // Tombol Update hanya untuk status Lead dan Prospect
     if (statusType === 'Lead' || statusType === 'Prospect') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
@@ -397,12 +417,17 @@ function generateLeadRow(item, statusType) {
 
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
-    const allLeads = [
+    // Cari di data leads dan prospects untuk menemukan item yang akan diupdate
+    const allLeadsAndProspects = [
         ...(currentData.leads || []),
         ...(currentData.prospects || [])
     ];
-    const lead = allLeads.find(l => l.id === leadId);
-    if (!lead || !modal) return;
+    const lead = allLeadsAndProspects.find(l => l.id === leadId);
+
+    if (!lead || !modal) {
+        showMessage('Data untuk diupdate tidak ditemukan.', 'error');
+        return;
+    }
     document.getElementById('updateLeadId').value = lead.id;
     document.getElementById('modalCustomerName').textContent = lead.customerName;
     const statusSelect = document.getElementById('updateStatus');
@@ -416,8 +441,6 @@ function openUpdateModal(leadId) {
         statusSelect.innerHTML = `<option value="Prospect">Prospect</option><option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     } else if (currentStatus === 'Prospect') {
         statusSelect.innerHTML = `<option value="Deal">Deal</option><option value="Lost">Lost</option>`;
-    } else if (currentStatus === 'Deal') {
-        statusSelect.innerHTML = `<option value="Lost">Lost</option>`;
     }
     modal.classList.add('active');
 }
