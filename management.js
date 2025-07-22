@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.1.0 - Perbaikan Stabilitas dan Penanganan Error.
+ * @version 6.2.0 - Menambahkan modal detail di Pusat Validasi.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -10,6 +10,27 @@ const currentUser = JSON.parse(currentUserJSON);
 if (currentUser.role !== 'management') { alert('Akses ditolak. Halaman ini hanya untuk manajemen.'); window.location.href = 'dashboard.html'; }
 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
+
+// [NEW] CONFIG object untuk mapping data dan label detail
+const CONFIG = {
+    dataMapping: {
+        'Leads': { dataKey: 'leads', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'Prospects': { dataKey: 'prospects', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'B2BBookings': { dataKey: 'b2bBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'VenueBookings': { dataKey: 'venueBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Deal Lainnya': { dataKey: 'dealLainnya', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Canvasing': { dataKey: 'canvasing', detailLabels: { datestamp: 'Waktu Upload', sales: 'Sales', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Promosi': { dataKey: 'promosi', detailLabels: { datestamp: 'Waktu Upload', sales: 'Sales', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
+        'DoorToDoor': { dataKey: 'doorToDoor', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Quotations': { dataKey: 'quotations', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Surveys': { dataKey: 'surveys', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Reports': { dataKey: 'reports', detailLabels: { datestamp: 'Waktu Upload', sales: 'Sales', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'CRMSurveys': { dataKey: 'crmSurveys', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Conversions': { dataKey: 'conversions', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Events': { dataKey: 'events', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'Campaigns': { dataKey: 'campaigns', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+    }
+};
 
 const TARGET_CONFIG = {
     daily: [
@@ -38,6 +59,7 @@ const ALL_DATA_KEYS = Object.values(TARGET_CONFIG).flat().map(t => t.dataKey);
 let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
+let pendingEntries = {}; // [NEW] Cache for pending data
 
 // =================================================================================
 // FUNGSI PENGAMBILAN DATA
@@ -113,13 +135,13 @@ function getFilteredData(salesName, dataKey, validationFilter = ['Approved']) {
     return data.filter(item => 
         item &&
         item.sales === salesName && 
-        (validationFilter.includes('All') || validationFilter.includes(item.validationStatus))
+        (validationFilter.includes('All') || (item.validationStatus && validationFilter.map(f=>f.toLowerCase()).includes(item.validationStatus.toLowerCase())))
     );
 }
 
 function updateStatCards(penalties) {
-    const approvedLeads = (allData.leads || []).filter(d => d && d.validationStatus === 'Approved');
-    const approvedCanvasing = (allData.canvasing || []).filter(d => d && d.validationStatus === 'Approved');
+    const approvedLeads = (allData.leads || []).filter(d => d && d.validationStatus && d.validationStatus.toLowerCase() === 'approved');
+    const approvedCanvasing = (allData.canvasing || []).filter(d => d && d.validationStatus && d.validationStatus.toLowerCase() === 'approved');
     document.getElementById('totalLeads').textContent = approvedLeads.length;
     document.getElementById('totalCanvasing').textContent = approvedCanvasing.length;
     
@@ -263,11 +285,12 @@ function updateTeamValidationBreakdown() {
         const data = allData[key] || [];
         if(Array.isArray(data)) {
             data.forEach(item => {
-                if(item) {
+                if(item && item.validationStatus) {
                     total++;
-                    if (item.validationStatus === 'Approved') approved++;
-                    else if (item.validationStatus === 'Pending') pending++;
-                    else if (item.validationStatus === 'Rejected') rejected++;
+                    const status = item.validationStatus.toLowerCase();
+                    if (status === 'approved') approved++;
+                    else if (status === 'pending') pending++;
+                    else if (status === 'rejected') rejected++;
                 }
             });
         }
@@ -301,7 +324,8 @@ async function loadPendingEntries() {
         const response = await fetch(`${SCRIPT_URL}?action=getPendingEntries&t=${new Date().getTime()}`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            renderValidationCenter(result.data);
+            pendingEntries = result.data; // Cache the data
+            renderValidationCenter(pendingEntries);
         } else {
             throw new Error(result.message);
         }
@@ -310,6 +334,10 @@ async function loadPendingEntries() {
     }
 }
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Menambahkan tombol "Detail".
+ */
 function renderValidationCenter(data) {
     const container = document.getElementById('validationContainer');
     if (!container) return;
@@ -345,6 +373,7 @@ function renderValidationCenter(data) {
                     <td>${item.sales}</td>
                     <td>${mainDetail}</td>
                     <td class="validation-actions">
+                        <button class="btn btn--sm btn--outline" onclick="openDetailModal('${item.id}', '${sheetName}')">Detail</button>
                         <button class="btn btn--sm btn--primary" onclick="handleValidation('${sheetName}', '${item.id}', 'approve')">Approve</button>
                         <button class="btn btn--sm btn--secondary" onclick="handleValidation('${sheetName}', '${item.id}', 'reject')">Reject</button>
                     </td>
@@ -396,6 +425,68 @@ async function handleValidation(sheetName, id, type) {
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
     }
+}
+
+// =================================================================================
+// FUNGSI MODAL [BARU]
+// =================================================================================
+
+function closeDetailModal() {
+    const modal = document.getElementById('managementDetailModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function openDetailModal(itemId, sheetName) {
+    const items = pendingEntries[sheetName] || [];
+    const item = items.find(d => d && d.id === itemId);
+    const mapping = CONFIG.dataMapping[sheetName];
+
+    if (!item || !mapping) {
+        console.error("Data atau mapping tidak ditemukan untuk modal:", itemId, sheetName);
+        showMessage("Tidak dapat menampilkan detail data.", "error");
+        return;
+    }
+
+    const modal = document.getElementById('managementDetailModal');
+    const modalTitle = document.getElementById('managementDetailModalTitle');
+    const modalBody = document.getElementById('managementDetailModalBody');
+    if(!modal || !modalTitle || !modalBody) return;
+    
+    modalTitle.textContent = `Detail Data - ${sheetName}`;
+    modalBody.innerHTML = '';
+
+    const detailList = document.createElement('dl');
+    detailList.className = 'detail-list';
+    const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
+
+    for (const key in mapping.detailLabels) {
+        if (Object.prototype.hasOwnProperty.call(item, key) && (item[key] || item[key] === 0)) {
+            const dt = document.createElement('dt');
+            dt.textContent = mapping.detailLabels[key];
+            
+            const dd = document.createElement('dd');
+            let value = item[key];
+
+            if (key === 'timestamp') value = item.datestamp;
+            else if (dateFields.includes(key)) value = formatDate(value);
+            else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
+            else if (key === 'validationStatus') {
+                dd.innerHTML = `<span class="status status--${(value || 'pending').toLowerCase()}">${value || 'Pending'}</span>`;
+                detailList.appendChild(dt); detailList.appendChild(dd); continue;
+            } else if (typeof value === 'string' && (value.startsWith('http'))) {
+                 dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
+                detailList.appendChild(dt); detailList.appendChild(dd); continue;
+            }
+            
+            dd.textContent = value;
+            detailList.appendChild(dt); detailList.appendChild(dd);
+        }
+    }
+    
+    modalBody.appendChild(detailList);
+    modal.classList.add('active');
 }
 
 
