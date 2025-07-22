@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.0.0 - Implementasi Sistem Validasi Data.
+ * @version 6.1.0 - Perbaikan Stabilitas dan Penanganan Error.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -10,7 +10,6 @@ const currentUser = JSON.parse(currentUserJSON);
 if (currentUser.role !== 'management') { alert('Akses ditolak. Halaman ini hanya untuk manajemen.'); window.location.href = 'dashboard.html'; }
 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
-const REFRESH_INTERVAL = 60000; // 1 menit
 
 const TARGET_CONFIG = {
     daily: [
@@ -69,7 +68,7 @@ async function loadInitialData(isInitialLoad = false) {
                 allSalesUsers = allData.users.filter(u => u.role === 'sales').map(u => u.name);
             } else {
                 const salesFromActivities = new Set();
-                ALL_DATA_KEYS.forEach(key => (allData[key] || []).forEach(item => item.sales && salesFromActivities.add(item.sales)));
+                ALL_DATA_KEYS.forEach(key => (allData[key] || []).forEach(item => item && item.sales && salesFromActivities.add(item.sales)));
                 allSalesUsers = Array.from(salesFromActivities);
             }
             
@@ -95,25 +94,32 @@ async function loadInitialData(isInitialLoad = false) {
 // =================================================================================
 
 function updateAllUI() {
-    const penalties = calculatePenalties();
-    updateStatCards(penalties);
-    updateLeaderboard(penalties);
-    renderTabbedTargetSummary();
-    renderTimeOffList();
-    updateTeamValidationBreakdown();
+    try {
+        const penalties = calculatePenalties();
+        updateStatCards(penalties);
+        updateLeaderboard(penalties);
+        renderTabbedTargetSummary();
+        renderTimeOffList();
+        updateTeamValidationBreakdown();
+    } catch(error) {
+        console.error("Error updating management UI:", error);
+        showMessage("Terjadi kesalahan saat menampilkan data manajemen.", "error");
+    }
 }
 
 function getFilteredData(salesName, dataKey, validationFilter = ['Approved']) {
     const data = allData[dataKey] || [];
+    if (!Array.isArray(data)) return [];
     return data.filter(item => 
+        item &&
         item.sales === salesName && 
         (validationFilter.includes('All') || validationFilter.includes(item.validationStatus))
     );
 }
 
 function updateStatCards(penalties) {
-    const approvedLeads = (allData.leads || []).filter(d => d.validationStatus === 'Approved');
-    const approvedCanvasing = (allData.canvasing || []).filter(d => d.validationStatus === 'Approved');
+    const approvedLeads = (allData.leads || []).filter(d => d && d.validationStatus === 'Approved');
+    const approvedCanvasing = (allData.canvasing || []).filter(d => d && d.validationStatus === 'Approved');
     document.getElementById('totalLeads').textContent = approvedLeads.length;
     document.getElementById('totalCanvasing').textContent = approvedCanvasing.length;
     
@@ -156,7 +162,7 @@ function calculatePenalties() {
             datesToCheck.forEach(date => {
                 if (!isDayOff(date, salesName)) {
                     const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved'])
-                        .filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                        .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
                     if (achievedToday < target.target) penalties.bySales[salesName] += target.penalty;
                 }
             });
@@ -168,7 +174,7 @@ function calculatePenalties() {
             sundaysInPeriod.forEach(sunday => {
                 const weekStart = getWeekStart(sunday);
                 const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved'])
-                    .filter(d => { const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= sunday; }).length;
+                    .filter(d => { if(!d) return false; const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= sunday; }).length;
                 if (achievedThisWeek < target.target) penalties.bySales[salesName] += target.penalty;
             });
         });
@@ -189,7 +195,9 @@ function calculatePenalties() {
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
-    return (allData.timeOff || []).some(off => off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
+    const timeOffData = allData.timeOff || [];
+    if (!Array.isArray(timeOffData)) return false;
+    return timeOffData.some(off => off && off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
 }
 
 function renderTabbedTargetSummary() {
@@ -219,15 +227,15 @@ function renderTabbedTargetSummary() {
                         if (isDayOff(date, salesName)) {
                             cellClass = 'off-day';
                         } else {
-                            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
                             cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                         }
                     } else if (period === 'weekly' && date.getDay() === 0) {
                         const weekStart = getWeekStart(date);
-                        const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
+                        const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     } else if (period === 'monthly' && date.getDate() === 20) {
-                        const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
+                        const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
                         cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
                     tableBody += `<td class="${cellClass}">${cellContent}</td>`;
@@ -253,12 +261,16 @@ function updateTeamValidationBreakdown() {
     let total = 0, approved = 0, pending = 0, rejected = 0;
     ALL_DATA_KEYS.forEach(key => {
         const data = allData[key] || [];
-        data.forEach(item => {
-            total++;
-            if (item.validationStatus === 'Approved') approved++;
-            else if (item.validationStatus === 'Pending') pending++;
-            else if (item.validationStatus === 'Rejected') rejected++;
-        });
+        if(Array.isArray(data)) {
+            data.forEach(item => {
+                if(item) {
+                    total++;
+                    if (item.validationStatus === 'Approved') approved++;
+                    else if (item.validationStatus === 'Pending') pending++;
+                    else if (item.validationStatus === 'Rejected') rejected++;
+                }
+            });
+        }
     });
     container.innerHTML = `
         <div class="validation-stats">
@@ -266,8 +278,7 @@ function updateTeamValidationBreakdown() {
             <div class="stat-item pending"><strong>${pending}</strong> Pending</div>
             <div class="stat-item rejected"><strong>${rejected}</strong> Ditolak</div>
             <div class="stat-item total"><strong>${total}</strong> Total Data</div>
-        </div>
-    `;
+        </div>`;
     const pendingBadge = document.getElementById('pendingCountBadge');
     if (pending > 0) {
         pendingBadge.textContent = pending;
@@ -278,11 +289,12 @@ function updateTeamValidationBreakdown() {
 }
 
 // =================================================================================
-// PUSAT VALIDASI [BARU]
+// PUSAT VALIDASI
 // =================================================================================
 
 async function loadPendingEntries() {
     const container = document.getElementById('validationContainer');
+    if (!container) return;
     container.innerHTML = '<p>Memuat data yang perlu divalidasi...</p>';
     
     try {
@@ -300,6 +312,7 @@ async function loadPendingEntries() {
 
 function renderValidationCenter(data) {
     const container = document.getElementById('validationContainer');
+    if (!container) return;
     container.innerHTML = '';
 
     if (Object.keys(data).length === 0) {
@@ -311,6 +324,7 @@ function renderValidationCenter(data) {
     let totalPending = 0;
     for (const sheetName in data) {
         const items = data[sheetName];
+        if (!Array.isArray(items)) continue;
         totalPending += items.length;
         const card = document.createElement('div');
         card.className = 'card';
@@ -323,6 +337,7 @@ function renderValidationCenter(data) {
                     <tbody>`;
         
         items.forEach(item => {
+            if (!item) return;
             const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
             tableHTML += `
                 <tr>
@@ -344,6 +359,8 @@ function renderValidationCenter(data) {
     if (totalPending > 0) {
         pendingBadge.textContent = totalPending;
         pendingBadge.style.display = 'inline-flex';
+    } else {
+        pendingBadge.style.display = 'none';
     }
 }
 
@@ -371,8 +388,8 @@ async function handleValidation(sheetName, id, type) {
         const result = await response.json();
         if (result.status === 'success') {
             showMessage('Validasi berhasil disimpan.', 'success');
-            loadPendingEntries(); // Refresh validation center
-            loadInitialData(); // Refresh dashboard data
+            loadPendingEntries(); 
+            loadInitialData(); 
         } else {
             throw new Error(result.message);
         }
@@ -432,6 +449,7 @@ async function handleKpiSettingChange(event) {
 function setupTimeOffForm() {
     const form = document.getElementById('timeOffForm');
     const salesSelect = document.getElementById('timeOffSales');
+    if (!form || !salesSelect) return;
     salesSelect.innerHTML = '<option value="Global">Global (Hari Libur)</option>';
     allSalesUsers.forEach(name => {
         salesSelect.innerHTML += `<option value="${name}">${name}</option>`;
@@ -460,7 +478,10 @@ function renderTimeOffList() {
     const container = document.getElementById('timeOffListContainer');
     if (!container) return;
     container.innerHTML = '';
-    (allData.timeOff || []).sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
+    const timeOffData = allData.timeOff || [];
+    if (!Array.isArray(timeOffData)) return;
+    timeOffData.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
+        if (!item) return;
         const li = document.createElement('li');
         const displayDate = new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
         li.innerHTML = `<span>${displayDate} - <strong>${item.sales}</strong></span><button class="delete-btn" data-id="${item.id}">&times;</button>`;
