@@ -940,7 +940,7 @@ select.form-control {
   color: white;
 }
 
-/* Target Details */
+/* [DEPRECATED] Target Details - Digantikan oleh Performance Table */
 .target-details {
   margin-top: var(--space-24);
 }
@@ -1364,4 +1364,61 @@ input:checked + .toggle-slider:before {
 
 .validation-actions .btn--sm {
     padding: var(--space-4) var(--space-8);
+}
+
+/* [NEW] Performance Report Table (Sales Dashboard) */
+.performance-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+.performance-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    min-width: 800px; /* Ensure table has a minimum width to show scrollbar */
+}
+
+.performance-table th,
+.performance-table td {
+    border: 1px solid var(--color-border);
+    padding: var(--space-8);
+    text-align: center;
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+
+.performance-table th {
+    background-color: var(--color-secondary);
+    font-weight: var(--font-weight-semibold);
+    min-width: 60px; /* Width for date columns */
+}
+
+.performance-table td:first-child {
+    text-align: left;
+    font-weight: var(--font-weight-medium);
+    background-color: var(--color-secondary);
+    min-width: 220px; /* Width for KPI name column */
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    white-space: normal;
+    word-break: break-word;
+}
+
+[data-color-scheme="dark"] .performance-table td:first-child {
+    background-color: var(--color-charcoal-700); /* Match dark mode card header */
+}
+
+.par-cell {
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-base);
+    letter-spacing: 0.5px;
+}
+
+.carousel-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
 }
