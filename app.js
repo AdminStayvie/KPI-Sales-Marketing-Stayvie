@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 8.2.0 - [FIX] Memperbaiki logika tombol revisi dan mempertahankan timestamp asli.
+ * @version 8.2.0 - [FIX] Memperbaiki bug salah template form pada modal revisi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -54,6 +54,24 @@ const CONFIG = {
         'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
         'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
     }
+};
+
+const FORM_PAGE_MAP = {
+    'leads': 'input-lead',
+    'prospects': 'input-lead',
+    'b2bBookings': 'input-lead',
+    'venueBookings': 'input-lead',
+    'dealLainnya': 'input-lead',
+    'canvasing': 'upload-canvasing',
+    'promosi': 'upload-promosi',
+    'doorToDoor': 'door-to-door',
+    'quotations': 'quotation',
+    'surveys': 'survey-coliving',
+    'reports': 'laporan-mingguan',
+    'crmSurveys': 'crm-survey',
+    'conversions': 'konversi-venue',
+    'events': 'event-networking',
+    'campaigns': 'launch-campaign'
 };
 
 let currentData = { settings: {}, kpiSettings: {} };
@@ -231,7 +249,6 @@ async function handleRevisionSubmit(e) {
         }
     }
 
-    // [FIX] Hapus timestamp dan datestamp agar tidak terkirim ke backend
     delete data.timestamp;
     delete data.datestamp;
     
@@ -555,7 +572,7 @@ function updateSimpleSummaryTable(dataKey, mapping, container) {
         return;
     }
     const rowGenerator = window[mapping.rowGenerator];
-    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
@@ -610,7 +627,6 @@ function renderLeadTable(container, data, dataKey) {
     container.innerHTML = tableHTML;
 }
 
-// [FIX] Memperbaiki struktur kolom dan logika tombol revisi
 function generateSimpleRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
@@ -741,12 +757,13 @@ function openRevisionModal(itemId, dataKey) {
     const notesText = document.getElementById('rejectionNotesText');
 
     notesText.textContent = item.validationNotes || 'Tidak ada catatan.';
-    formContainer.innerHTML = ''; // Kosongkan form sebelumnya
+    formContainer.innerHTML = '';
     formContainer.dataset.sheetName = mapping.sheetName;
     formContainer.dataset.id = item.id;
 
-    const pageId = Object.keys(CONFIG.dataMapping).find(key => CONFIG.dataMapping[key].sheetName === mapping.sheetName && document.getElementById(key.toLowerCase()));
-    const formTemplate = pageId ? document.querySelector(`#${pageId.toLowerCase()} .kpi-form`) : document.querySelector(`#input-lead .kpi-form`);
+    // [FIX] Menggunakan mapping baru untuk menemukan template form yang benar
+    const pageId = FORM_PAGE_MAP[dataKey];
+    const formTemplate = pageId ? document.querySelector(`#${pageId} .kpi-form`) : null;
     
     if (formTemplate) {
         formContainer.innerHTML = formTemplate.innerHTML;
@@ -764,6 +781,7 @@ function openRevisionModal(itemId, dataKey) {
         }
     } else {
         formContainer.innerHTML = '<p class="message error">Tidak dapat memuat form revisi.</p>';
+        console.error(`Form template tidak ditemukan untuk dataKey: ${dataKey}`);
     }
 
     modal.classList.add('active');
