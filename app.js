@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.4.0 - Menambahkan fitur cutoff mingguan untuk tampilan progress.
+ * @version 7.5.0 - Mengubah Detail Target menjadi Carousel Mingguan.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -37,9 +37,7 @@ const CONFIG = {
             { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns' }
         ]
     },
-    dataMapping: {
-        // ... (Konten dataMapping tidak perlu diubah)
-    }
+    dataMapping: { /* ... Konten tidak berubah ... */ }
 };
 // Salin konten dataMapping dari file app.js Anda sebelumnya ke sini
 CONFIG.dataMapping = {
@@ -63,6 +61,7 @@ CONFIG.dataMapping = {
 let currentData = { settings: {}, kpiSettings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
+let currentWeekOffset = 0; // [NEW] State untuk carousel
 
 // ... (Salin semua fungsi dari 'FUNGSI PENGAMBILAN & PENGIRIMAN DATA' hingga sebelum 'FUNGSI UTAMA UI & PERHITUNGAN' dari file app.js Anda sebelumnya)
 // =================================================================================
@@ -203,13 +202,32 @@ function updateAllUI() {
         updateAllSummaries();
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
-        updateTodayProgress(); 
+        updateTodayProgress();
+        renderDetailedReport(); // [MODIFIED] Panggil fungsi render tabel baru
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
     }
 }
 
+function updateDashboard() {
+    document.getElementById('userDisplayName').textContent = currentUser.name;
+    const kpiSettings = currentData.kpiSettings || {};
+
+    let monthlyAchieved = 0;
+    let monthlyTotal = 0;
+    CONFIG.targets.monthly.forEach(target => {
+        if (kpiSettings[target.id] !== false) {
+            monthlyAchieved += calculateAchievementForTarget(target, ['approved']);
+            monthlyTotal += target.target;
+        }
+    });
+    updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
+
+    updateWeeklyCutoffProgress();
+}
+
+// ... (Salin semua fungsi lainnya dari file app.js Anda sebelumnya, KECUALI 'updateTargetBreakdown')
 function updateTodayProgress() {
     const container = document.getElementById('todayProgressBreakdown');
     if (!container) return;
@@ -265,63 +283,30 @@ function calculateAchievementForTarget(target, validationFilter) {
     return data.length;
 }
 
-/**
- * [FUNGSI DIPERBARUI]
- * Memisahkan kalkulasi mingguan ke fungsi sendiri.
- */
-function updateDashboard() {
-    document.getElementById('userDisplayName').textContent = currentUser.name;
-    const kpiSettings = currentData.kpiSettings || {};
-
-    // Kalkulasi Bulanan (tetap akumulatif)
-    let monthlyAchieved = 0;
-    let monthlyTotal = 0;
-    CONFIG.targets.monthly.forEach(target => {
-        if (kpiSettings[target.id] !== false) {
-            monthlyAchieved += calculateAchievementForTarget(target, ['approved']);
-            monthlyTotal += target.target;
-        }
-    });
-    updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
-
-    // Panggil fungsi baru untuk progress mingguan
-    updateWeeklyCutoffProgress();
-
-    updateTargetBreakdown(); // Ini untuk detail di bawah, bukan kartu utama
-}
-
-/**
- * [FUNGSI BARU]
- * Menghitung dan menampilkan progress untuk minggu ini saja (Senin - sekarang).
- */
 function updateWeeklyCutoffProgress() {
     const kpiSettings = currentData.kpiSettings || {};
     let weeklyAchieved = 0;
     let weeklyTotal = 0;
 
-    // Tentukan awal minggu ini (Senin)
     const weekStart = getWeekStart(new Date());
 
     CONFIG.targets.weekly.forEach(target => {
         if (kpiSettings[target.id] !== false) {
-            // Hitung pencapaian HANYA untuk minggu ini
             const achievedThisWeek = getFilteredData(target.dataKey, ['approved'])
                 .filter(d => {
                     if (!d) return false;
                     const itemDate = new Date(d.timestamp);
-                    return itemDate >= weekStart; // Cek apakah data dibuat pada atau setelah Senin minggu ini
+                    return itemDate >= weekStart;
                 }).length;
             
             weeklyAchieved += achievedThisWeek;
-            weeklyTotal += target.target; // Target per minggu
+            weeklyTotal += target.target;
         }
     });
 
     updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
 }
 
-
-// ... (Salin sisa fungsi dari 'calculateAndDisplayPenalties' hingga akhir dari file app.js Anda sebelumnya)
 function calculateAndDisplayPenalties() {
     const potentialPenaltyEl = document.getElementById('potentialPenalty');
     const finalPenaltyEl = document.getElementById('finalPenalty');
@@ -379,26 +364,6 @@ function calculatePenaltyForValidationStatus(validationFilter) {
         });
     }
     return totalPenalty;
-}
-
-function updateTargetBreakdown() {
-    const container = document.getElementById('targetBreakdown');
-    if (!container) return;
-    container.innerHTML = '';
-    const kpiSettings = currentData.kpiSettings || {};
-
-    ['daily', 'weekly', 'monthly'].forEach(period => {
-        const header = document.createElement('h4');
-        header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
-        container.appendChild(header);
-        CONFIG.targets[period].forEach(target => {
-            if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['approved']);
-                const status = achieved >= target.target ? 'completed' : 'pending';
-                container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
-            }
-        });
-    });
 }
 
 function updateValidationBreakdown() {
@@ -534,6 +499,128 @@ function generateLeadRow(item, dataKey, mapping) {
         </tr>`;
 }
 
+
+// =================================================================================
+// FUNGSI LAPORAN RINCI (CAROUSEL) [BARU]
+// =================================================================================
+
+function renderDetailedReport() {
+    const container = document.getElementById('detailedReportContainer');
+    const weekRangeDisplay = document.getElementById('weekRangeDisplay');
+    if (!container || !weekRangeDisplay) return;
+
+    const periodStartDate = getPeriodStartDate();
+    const periodEndDate = getPeriodEndDate();
+
+    // Tentukan tanggal awal minggu yang akan ditampilkan
+    const today = new Date();
+    const currentWeekStart = getWeekStart(today);
+    let displayWeekStart = new Date(currentWeekStart);
+    displayWeekStart.setDate(displayWeekStart.getDate() + (currentWeekOffset * 7));
+
+    // Batasi navigasi agar tidak keluar dari periode
+    document.getElementById('prevWeekBtn').disabled = displayWeekStart <= getWeekStart(periodStartDate);
+    
+    let nextWeekStart = new Date(displayWeekStart);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+    document.getElementById('nextWeekBtn').disabled = nextWeekStart > periodEndDate;
+
+    // Buat array 7 hari untuk minggu yang ditampilkan
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(displayWeekStart);
+        date.setDate(date.getDate() + i);
+        if (date <= periodEndDate) {
+            weekDates.push(date);
+        }
+    }
+
+    weekRangeDisplay.textContent = `${formatDate(weekDates[0])} - ${formatDate(weekDates[weekDates.length - 1])}`;
+
+    let tableHTML = '<table class="performance-table"><thead><tr><th>Target KPI</th>';
+    weekDates.forEach(date => {
+        tableHTML += `<th>${date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })}</th>`;
+    });
+    tableHTML += '</tr></thead><tbody>';
+
+    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly];
+    allTargets.forEach(target => {
+        const targetName = `${target.name} (${target.target})`;
+        tableHTML += `<tr><td>${targetName}</td>`;
+
+        weekDates.forEach(date => {
+            const dataForDate = (currentData[target.dataKey] || [])
+                .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString());
+            
+            const approved = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'approved').length;
+            const pending = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'pending').length;
+            const rejected = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'rejected').length;
+
+            tableHTML += `<td class="status-cell">
+                ${approved > 0 ? `<div class="status-line approved"><span>Appr:</span><span>${approved}</span></div>` : ''}
+                ${pending > 0 ? `<div class="status-line pending"><span>Pend:</span><span>${pending}</span></div>` : ''}
+                ${rejected > 0 ? `<div class="status-line rejected"><span>Rej:</span><span>${rejected}</span></div>` : ''}
+                ${dataForDate.length === 0 ? '-' : ''}
+            </td>`;
+        });
+        tableHTML += '</tr>';
+    });
+
+    tableHTML += '</tbody></table>';
+    container.innerHTML = tableHTML;
+}
+
+
+// =================================================================================
+// FUNGSI UTILITAS & INISIALISASI
+// =================================================================================
+
+function setupEventListeners() {
+    // ... (event listener lainnya tidak berubah)
+    document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
+    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showContentPage(link.getAttribute('data-page'));
+    }));
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
+    
+    document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#leadTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
+
+    // [NEW] Event listener untuk navigasi carousel
+    document.getElementById('prevWeekBtn').addEventListener('click', () => {
+        currentWeekOffset--;
+        renderDetailedReport();
+    });
+    document.getElementById('nextWeekBtn').addEventListener('click', () => {
+        currentWeekOffset++;
+        renderDetailedReport();
+    });
+}
+
+function initializeApp() {
+    if (!currentUser) return;
+    document.body.setAttribute('data-role', currentUser.role);
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+    setupEventListeners();
+    setupFilters(() => {
+        currentWeekOffset = 0; // Reset offset saat filter berubah
+        loadInitialData();
+    });
+    loadInitialData();
+}
+
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+// ... (Salin semua fungsi modal dan utilitas lainnya dari file app.js Anda sebelumnya)
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
@@ -633,34 +720,3 @@ function showContentPage(pageId) {
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
 }
-
-function setupEventListeners() {
-    document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
-    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
-        e.preventDefault();
-        showContentPage(link.getAttribute('data-page'));
-    }));
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
-    
-    document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('#leadTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
-            button.classList.add('active');
-            document.getElementById(button.dataset.tab).classList.add('active');
-        });
-    });
-}
-
-function initializeApp() {
-    if (!currentUser) return;
-    document.body.setAttribute('data-role', currentUser.role);
-    updateDateTime();
-    setInterval(updateDateTime, 60000);
-    setupEventListeners();
-    setupFilters(loadInitialData);
-    loadInitialData();
-}
-
-document.addEventListener('DOMContentLoaded', initializeApp);
