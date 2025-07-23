@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.4.0 - [MODIFIED] Mengganti detail target dengan laporan kinerja rinci mingguan (carousel).
+ * @version 7.5.0 - [MODIFIED] Menambahkan visualisasi warna P/A/R, highlight hari ini, dan target bulanan pada tabel kinerja.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -199,7 +199,7 @@ function updateAllUI() {
         updateAllSummaries();
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
-        renderPerformanceReport(); // [MODIFIED] Panggil fungsi baru
+        renderPerformanceReport();
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
@@ -371,7 +371,7 @@ function updateProgressBar(type, achieved, total) {
 }
 
 // =================================================================================
-// [NEW] LAPORAN KINERJA RINCI (PENGGANTI DETAIL TARGET)
+// [MODIFIED] LAPORAN KINERJA RINCI
 // =================================================================================
 
 function renderPerformanceReport() {
@@ -379,40 +379,37 @@ function renderPerformanceReport() {
     const kpiSettings = currentData.kpiSettings || {};
     if (!table) return;
 
-    // 1. Dapatkan tanggal untuk tampilan minggu ini
+    const todayString = toLocalDateString(new Date());
     const periodDates = getDatesForPeriod();
     if (periodDates.length === 0) {
-        table.innerHTML = '<tr><td>Pilih periode untuk melihat laporan.</td></tr>';
+        table.innerHTML = '<tbody><tr><td>Pilih periode untuk melihat laporan.</td></tr></tbody>';
         return;
     }
     const totalWeeks = Math.ceil(periodDates.length / 7);
     const weekDates = periodDates.slice(performanceReportWeekOffset * 7, (performanceReportWeekOffset * 7) + 7);
 
-    // 2. Pra-kalkulasi hitungan harian (P/A/R)
     const dailyCounts = {};
-    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly];
-    const dataKeys = allTargets.map(t => t.dataKey);
-
-    dataKeys.forEach(key => {
-        (currentData[key] || []).forEach(item => {
+    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
+    allTargets.forEach(target => {
+        (currentData[target.dataKey] || []).forEach(item => {
             if (!item || !item.timestamp) return;
             const itemDate = new Date(item.timestamp);
             const dateString = toLocalDateString(itemDate);
             
             if (!dailyCounts[dateString]) dailyCounts[dateString] = {};
-            if (!dailyCounts[dateString][key]) dailyCounts[dateString][key] = { P: 0, A: 0, R: 0 };
+            if (!dailyCounts[dateString][target.dataKey]) dailyCounts[dateString][target.dataKey] = { P: 0, A: 0, R: 0 };
             
             const status = (item.validationStatus || 'pending').toLowerCase();
-            if (status === 'pending') dailyCounts[dateString][key].P++;
-            else if (status === 'approved') dailyCounts[dateString][key].A++;
-            else if (status === 'rejected') dailyCounts[dateString][key].R++;
+            if (status === 'pending') dailyCounts[dateString][target.dataKey].P++;
+            else if (status === 'approved') dailyCounts[dateString][target.dataKey].A++;
+            else if (status === 'rejected') dailyCounts[dateString][target.dataKey].R++;
         });
     });
 
-    // 3. Bangun HTML Tabel
     let tableHeaderHTML = '<thead><tr><th>Target KPI</th>';
     weekDates.forEach(date => {
-        tableHeaderHTML += `<th>${date.toLocaleDateString('id-ID', { weekday: 'short' })}<br>${date.getDate()}</th>`;
+        const isTodayClass = toLocalDateString(date) === todayString ? 'is-today' : '';
+        tableHeaderHTML += `<th class="${isTodayClass}">${date.toLocaleDateString('id-ID', { weekday: 'short' })}<br>${date.getDate()}</th>`;
     });
     tableHeaderHTML += '</tr></thead>';
 
@@ -423,14 +420,16 @@ function renderPerformanceReport() {
             
             tableBodyHTML += `<tr><td>${target.name} (${target.target})</td>`;
             weekDates.forEach(date => {
+                const isTodayClass = toLocalDateString(date) === todayString ? 'is-today' : '';
                 let cellContent = '';
                 const dateString = toLocalDateString(date);
                 
                 if (period === 'daily') {
+                    const counts = dailyCounts[dateString]?.[target.dataKey] || { P: 0, A: 0, R: 0 };
                     cellContent = isDayOff(date, currentUser.name)
                         ? '-'
-                        : `<span class="par-cell">${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).P}/${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).A}/${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).R}</span>`;
-                } else if (period === 'weekly' && date.getDay() === 0) { // Hanya tampilkan pada hari Minggu
+                        : `<span class="par-cell"><span class="par-p">${counts.P}</span>/<span class="par-a">${counts.A}</span>/<span class="par-r">${counts.R}</span></span>`;
+                } else if (period === 'weekly' && date.getDay() === 0) {
                     const weekStart = getWeekStart(date);
                     let weeklyP = 0, weeklyA = 0, weeklyR = 0;
                     for (let i = 0; i < 7; i++) {
@@ -442,24 +441,44 @@ function renderPerformanceReport() {
                         weeklyA += counts.A;
                         weeklyR += counts.R;
                     }
-                    cellContent = `<span class="par-cell">${weeklyP}/${weeklyA}/${weeklyR}</span>`;
+                    cellContent = `<span class="par-cell"><span class="par-p">${weeklyP}</span>/<span class="par-a">${weeklyA}</span>/<span class="par-r">${weeklyR}</span></span>`;
                 }
-
-                tableBodyHTML += `<td>${cellContent}</td>`;
+                tableBodyHTML += `<td class="${isTodayClass}">${cellContent}</td>`;
             });
             tableBodyHTML += '</tr>';
         });
     });
-    tableBodyHTML += '</tbody>';
 
+    CONFIG.targets.monthly.forEach(target => {
+        if (kpiSettings[target.id] === false) return;
+        
+        let totalP = 0, totalA = 0, totalR = 0;
+        (currentData[target.dataKey] || []).forEach(item => {
+            const status = (item.validationStatus || 'pending').toLowerCase();
+            if (status === 'pending') totalP++;
+            else if (status === 'approved') totalA++;
+            else if (status === 'rejected') totalR++;
+        });
+
+        tableBodyHTML += `<tr>
+            <td>${target.name} (${target.target})</td>
+            <td colspan="7" class="monthly-total-cell">
+                Total Periode: 
+                <span class="par-cell">
+                    <span class="par-p">${totalP}</span>/<span class="par-a">${totalA}</span>/<span class="par-r">${totalR}</span>
+                </span>
+            </td>
+        </tr>`;
+    });
+
+    tableBodyHTML += '</tbody>';
     table.innerHTML = tableHeaderHTML + tableBodyHTML;
 
-    // 4. Perbarui Navigasi Carousel
     document.getElementById('prevWeekBtn').disabled = (performanceReportWeekOffset === 0);
     document.getElementById('nextWeekBtn').disabled = (performanceReportWeekOffset >= totalWeeks - 1);
-    const startRange = weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'});
-    const endRange = weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'});
-    document.getElementById('weekRangeLabel').textContent = `${startRange} - ${endRange}`;
+    const startRange = weekDates[0] ? weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
+    const endRange = weekDates.length > 0 ? weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
+    document.getElementById('weekRangeLabel').textContent = startRange && endRange ? `${startRange} - ${endRange}` : '...';
 }
 
 // =================================================================================
