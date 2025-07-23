@@ -1259,6 +1259,14 @@ input:checked + .toggle-slider:before {
   border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity));
 }
 
+/* [NEW] Status Deal */
+.status--deal {
+    background-color: rgba(var(--color-primary-rgb), var(--status-bg-opacity));
+    color: var(--color-primary);
+    border: 1px solid rgba(var(--color-primary-rgb), var(--status-border-opacity));
+}
+
+
 /* Kartu Ringkasan Validasi di Dashboard Sales */
 .validation-stats {
     display: flex;
@@ -1318,7 +1326,7 @@ input:checked + .toggle-slider:before {
     padding: var(--space-4) var(--space-8);
 }
 
-/* [MODIFIED] Performance Report Table (Sales Dashboard) */
+/* Performance Report Table (Sales Dashboard) */
 .performance-table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
