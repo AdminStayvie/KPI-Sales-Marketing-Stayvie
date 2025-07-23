@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.4.0 - [FEAT] Mengubah Pusat Validasi menjadi format tab per sales.
+ * @version 6.5.0 - [FEAT] Mengubah proses validasi agar tidak me-refresh halaman secara otomatis.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -404,8 +404,8 @@ function renderValidationTabs(data) {
                         <td>${mainDetail}</td>
                         <td class="validation-actions">
                             <button class="btn btn--sm btn--outline" onclick="openDetailModal('${item.id}', '${sheetName}')">Detail</button>
-                            <button class="btn btn--sm btn--primary" onclick="handleValidation('${sheetName}', '${item.id}', 'approve')">Approve</button>
-                            <button class="btn btn--sm btn--secondary" onclick="handleValidation('${sheetName}', '${item.id}', 'reject')">Reject</button>
+                            <button class="btn btn--sm btn--primary" onclick="handleValidation(this, '${sheetName}', '${item.id}', 'approve')">Approve</button>
+                            <button class="btn btn--sm btn--secondary" onclick="handleValidation(this, '${sheetName}', '${item.id}', 'reject')">Reject</button>
                         </td>
                     </tr>`;
             });
@@ -427,8 +427,8 @@ function renderValidationTabs(data) {
     });
 }
 
-
-async function handleValidation(sheetName, id, type) {
+// [MODIFIED] Fungsi validasi diubah agar tidak me-refresh halaman
+async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
     if (type === 'reject') {
         notes = prompt(`Mohon berikan alasan penolakan untuk data ini:`);
@@ -441,6 +441,10 @@ async function handleValidation(sheetName, id, type) {
     const action = type === 'approve' ? 'approveEntry' : 'rejectEntry';
     const payload = { action, sheetName, id, notes };
 
+    // Disable buttons in the current row to prevent double clicks
+    const actionCell = buttonElement.parentElement;
+    actionCell.querySelectorAll('button').forEach(btn => btn.disabled = true);
+
     showMessage('Memproses validasi...', 'info');
     try {
         const response = await fetch(SCRIPT_URL, {
@@ -452,13 +456,55 @@ async function handleValidation(sheetName, id, type) {
         const result = await response.json();
         if (result.status === 'success') {
             showMessage('Validasi berhasil disimpan.', 'success');
-            loadPendingEntries(); 
-            loadInitialData(); 
+            
+            // Update UI without full refresh
+            const row = actionCell.parentElement;
+
+            if (type === 'approve') {
+                actionCell.innerHTML = `<span class="status status--approved">Approved</span>`;
+            } else {
+                actionCell.innerHTML = `<span class="status status--rejected">Rejected</span>`;
+            }
+
+            // Decrement pending counts
+            const pendingBadge = document.getElementById('pendingCountBadge');
+            if (pendingBadge) {
+                let currentCount = parseInt(pendingBadge.textContent) || 0;
+                if (currentCount > 0) {
+                    pendingBadge.textContent = currentCount - 1;
+                    if (pendingBadge.textContent === '0') pendingBadge.style.display = 'none';
+                }
+            }
+
+            const activeTabBadge = document.querySelector('#validationTabsContainer .tab-button.active .pending-badge');
+            if (activeTabBadge) {
+                 let currentTabCount = parseInt(activeTabBadge.textContent) || 0;
+                 if (currentTabCount > 0) {
+                    activeTabBadge.textContent = currentTabCount - 1;
+                 }
+            }
+            
+            // Fade out and remove the row after a delay
+            setTimeout(() => {
+                row.style.opacity = '0';
+                setTimeout(() => {
+                    row.remove();
+                    // Check if a table is now empty and show a message
+                    const tableBody = actionCell.closest('tbody');
+                    if (tableBody && tableBody.children.length === 0) {
+                        const card = tableBody.closest('.card');
+                        card.innerHTML = `<div class="card__body" style="text-align: center;">Semua item di kategori ini telah divalidasi.</div>`;
+                    }
+                }, 500);
+            }, 1000);
+
         } else {
             throw new Error(result.message);
         }
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
+        // Re-enable buttons on failure
+        actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
     }
 }
 
@@ -497,7 +543,7 @@ function openDetailModal(itemId, sheetName) {
     const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
 
     for (const key in mapping.detailLabels) {
-        if (Object.prototype.hasOwnProperty.call(item, key) && (item[key] || item[key] === 0)) {
+        if (Object.prototype.hasOwnProperty.call(item, key) && (item[key] || item[key] === 0 || typeof item[key] === 'string')) {
             const dt = document.createElement('dt');
             dt.textContent = mapping.detailLabels[key];
             
