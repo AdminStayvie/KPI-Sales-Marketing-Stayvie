@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.7.0 - [FEAT] Menambahkan input bukti deal pada modal update status.
+ * @version 7.8.0 - [FEAT] Melengkapi detail modal untuk data Deal.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -40,9 +40,10 @@ const CONFIG = {
     dataMapping: {
         'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        // [MODIFIED] Melengkapi detailLabels untuk semua jenis Deal
+        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
         'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
         'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
@@ -185,7 +186,6 @@ async function handleUpdateLead(e) {
         return;
     }
 
-    // [MODIFIED] Handle file upload for proof of deal
     if (newStatus === 'Deal') {
         const proofInput = form.querySelector('#modalProofOfDeal');
         if (proofInput && proofInput.files.length > 0) {
@@ -652,7 +652,6 @@ function openUpdateModal(leadId) {
         statusSelect.innerHTML = `<option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     }
 
-    // [MODIFIED] Show/hide proof of deal input based on selection
     const toggleProofVisibility = () => {
         if (statusSelect.value === 'Deal') {
             proofContainer.style.display = 'block';
@@ -663,9 +662,9 @@ function openUpdateModal(leadId) {
         }
     };
 
-    statusSelect.removeEventListener('change', toggleProofVisibility); // Hapus listener lama
-    statusSelect.addEventListener('change', toggleProofVisibility);   // Tambah listener baru
-    toggleProofVisibility(); // Panggil sekali untuk inisialisasi
+    statusSelect.removeEventListener('change', toggleProofVisibility);
+    statusSelect.addEventListener('change', toggleProofVisibility);
+    toggleProofVisibility();
 
     modal.classList.add('active');
 }
