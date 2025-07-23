@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.2.0 - Memperbaiki bug case-sensitive pada perhitungan validasi.
+ * @version 7.3.0 - [MODIFIED] Menyesuaikan logika kartu KPI untuk menampilkan progres harian, mingguan, dan periode berjalan dengan semua status data.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -223,24 +223,91 @@ function calculateAchievementForTarget(target, validationFilter) {
     return data.length;
 }
 
+/**
+ * [FUNGSI BARU] Menghitung progres untuk kartu KPI utama.
+ * Fungsi ini menghitung semua data (tanpa filter status) dalam rentang waktu tertentu.
+ * @param {string} dataKey - Kunci data dari objek CONFIG (e.g., 'leads').
+ * @param {Date} startDate - Tanggal mulai rentang waktu.
+ * @param {Date} endDate - Tanggal akhir rentang waktu.
+ * @returns {number} Jumlah item yang tercapai.
+ */
+function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
+    const data = currentData[dataKey] || [];
+    if (!Array.isArray(data)) return 0;
+
+    return data.filter(item => {
+        if (!item || !item.timestamp) return false;
+        const itemDate = new Date(item.timestamp);
+        // Memastikan tanggal valid sebelum membandingkan
+        return !isNaN(itemDate.getTime()) && itemDate >= startDate && itemDate <= endDate;
+    }).length;
+}
+
+
+/**
+ * [FUNGSI DIMODIFIKASI] Menghitung ulang progres untuk kartu KPI.
+ * - Harian: Menghitung progres HARI INI.
+ * - Mingguan: Menghitung progres MINGGU INI (Senin-Minggu).
+ * - Bulanan: Menghitung progres PERIODE INI (sesuai filter).
+ * Semua perhitungan untuk kartu ini menyertakan semua status data (pending/approved/rejected).
+ */
 function updateDashboard() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
-    const achievements = { daily: 0, weekly: 0, monthly: 0 };
-    const totals = { daily: 0, weekly: 0, monthly: 0 };
     const kpiSettings = currentData.kpiSettings || {};
 
-    ['daily', 'weekly', 'monthly'].forEach(period => {
-        CONFIG.targets[period].forEach(target => {
-            if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['approved']);
-                achievements[period] += achieved;
-                totals[period] += target.target;
-            }
-        });
-        updateProgressBar(period, achievements[period], totals[period]);
+    // --- Kalkulasi Progress untuk Kartu KPI Utama (Semua Status) ---
+
+    // 1. Target Harian (Progress Hari Ini)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let dailyAchieved = 0;
+    let dailyTotal = 0;
+    CONFIG.targets.daily.forEach(target => {
+        if (kpiSettings[target.id] !== false) {
+            dailyAchieved += calculateProgressForAllStatuses(target.dataKey, todayStart, todayEnd);
+            dailyTotal += target.target;
+        }
     });
+    updateProgressBar('daily', dailyAchieved, dailyTotal);
+
+    // 2. Target Mingguan (Progress Minggu Ini)
+    const now = new Date();
+    const weekStart = getWeekStart(now); // Fungsi dari utils.js (Senin)
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6); // Minggu
+    weekEnd.setHours(23, 59, 59, 999);
+
+    let weeklyAchieved = 0;
+    let weeklyTotal = 0;
+    CONFIG.targets.weekly.forEach(target => {
+        if (kpiSettings[target.id] !== false) {
+            weeklyAchieved += calculateProgressForAllStatuses(target.dataKey, weekStart, weekEnd);
+            weeklyTotal += target.target;
+        }
+    });
+    updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
+
+    // 3. Target Bulanan (Progress Periode Ini)
+    let monthlyAchieved = 0;
+    let monthlyTotal = 0;
+    CONFIG.targets.monthly.forEach(target => {
+        if (kpiSettings[target.id] !== false) {
+            // Progres bulanan dihitung dari semua data yang ada di `currentData`,
+            // karena `currentData` sudah berisi data untuk periode yang dipilih.
+            const allDataForTargetInPeriod = currentData[target.dataKey] || [];
+            monthlyAchieved += allDataForTargetInPeriod.length;
+            monthlyTotal += target.target;
+        }
+    });
+    updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
+
+    // --- Bagian ini tetap sama, karena untuk Detail Target berdasarkan data ter-approve ---
     updateTargetBreakdown();
 }
+
 
 function calculateAndDisplayPenalties() {
     const potentialPenaltyEl = document.getElementById('potentialPenalty');
