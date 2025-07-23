@@ -940,54 +940,6 @@ select.form-control {
   color: white;
 }
 
-/* [DEPRECATED] Target Details - Digantikan oleh Performance Table */
-.target-details {
-  margin-top: var(--space-24);
-}
-
-.target-breakdown {
-  display: grid;
-  gap: var(--space-16);
-}
-
-.target-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-12);
-  background-color: var(--color-secondary);
-  border-radius: var(--radius-base);
-}
-
-.target-name {
-  font-weight: var(--font-weight-medium);
-}
-
-.target-progress {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.target-status {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-4) var(--space-8);
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-}
-
-.target-status.completed {
-  background-color: rgba(var(--color-success-rgb), var(--status-bg-opacity));
-  color: var(--color-success);
-}
-
-.target-status.pending {
-  background-color: rgba(var(--color-warning-rgb), var(--status-bg-opacity));
-  color: var(--color-warning);
-}
-
 /* Form Styles */
 .form-container {
   max-width: 600px;
@@ -1366,17 +1318,17 @@ input:checked + .toggle-slider:before {
     padding: var(--space-4) var(--space-8);
 }
 
-/* [NEW] Performance Report Table (Sales Dashboard) */
+/* [MODIFIED] Performance Report Table (Sales Dashboard) */
 .performance-table-wrapper {
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
 }
 
 .performance-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    min-width: 800px; /* Ensure table has a minimum width to show scrollbar */
+    min-width: 800px;
 }
 
 .performance-table th,
@@ -1391,14 +1343,14 @@ input:checked + .toggle-slider:before {
 .performance-table th {
     background-color: var(--color-secondary);
     font-weight: var(--font-weight-semibold);
-    min-width: 60px; /* Width for date columns */
+    min-width: 60px;
 }
 
 .performance-table td:first-child {
     text-align: left;
     font-weight: var(--font-weight-medium);
     background-color: var(--color-secondary);
-    min-width: 220px; /* Width for KPI name column */
+    min-width: 220px;
     position: sticky;
     left: 0;
     z-index: 1;
@@ -1406,8 +1358,19 @@ input:checked + .toggle-slider:before {
     word-break: break-word;
 }
 
+.performance-table th.is-today,
+.performance-table td.is-today {
+    background-color: rgba(var(--color-primary-rgb), 0.1);
+}
+
+
 [data-color-scheme="dark"] .performance-table td:first-child {
-    background-color: var(--color-charcoal-700); /* Match dark mode card header */
+    background-color: var(--color-charcoal-700);
+}
+
+[data-color-scheme="dark"] .performance-table th.is-today,
+[data-color-scheme="dark"] .performance-table td.is-today {
+    background-color: rgba(var(--color-teal-300-rgb), 0.15);
 }
 
 .par-cell {
@@ -1417,8 +1380,24 @@ input:checked + .toggle-slider:before {
     letter-spacing: 0.5px;
 }
 
+.par-cell .par-p { color: var(--color-warning); }
+.par-cell .par-a { color: var(--color-success); }
+.par-cell .par-r { color: var(--color-error); }
+
+
 .carousel-nav {
     display: flex;
     align-items: center;
     gap: var(--space-8);
+}
+
+.monthly-total-cell {
+    text-align: right !important;
+    padding-right: var(--space-16) !important;
+    font-weight: var(--font-weight-semibold);
+    background-color: var(--color-secondary);
+}
+
+[data-color-scheme="dark"] .monthly-total-cell {
+    background-color: var(--color-charcoal-700);
 }
