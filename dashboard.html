@@ -179,7 +179,6 @@
                 <div class="form-group"><label class="form-label">Status Saat Ini</label><p id="modalCurrentStatus" class="status" style="font-weight: bold; padding-left: 0;"></p></div>
                 <div class="form-group"><label for="updateStatus" class="form-label">Ubah Status Menjadi</label><select id="updateStatus" name="status" class="form-control" required></select></div>
                 <div class="form-group"><label for="statusLog" class="form-label">Catatan Log Status</label><textarea id="statusLog" name="statusLog" class="form-control" rows="3" required></textarea></div>
-                <!-- [NEW] Kolom input file untuk bukti deal, tersembunyi secara default -->
                 <div id="proofOfDealContainer" class="form-group" style="display: none;">
                     <label for="modalProofOfDeal" class="form-label">Bukti Deal (Invoice, Bukti Transfer, dll)</label>
                     <input type="file" id="modalProofOfDeal" name="proofOfDeal" class="form-control" accept="image/*,.pdf">
@@ -188,6 +187,26 @@
             </form>
         </div>
     </div>
+
+    <!-- [NEW] Modal untuk Revisi Data -->
+    <div id="revisionModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="revisionModalTitle">Revisi Data</h3>
+                <button class="close-button" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="revisionModalBody">
+                <div id="rejectionNotesContainer" class="rejection-notes-card">
+                    <h4>Catatan Penolakan</h4>
+                    <p id="rejectionNotesText"></p>
+                </div>
+                <form id="revisionForm">
+                    <!-- Form fields will be dynamically injected here -->
+                </form>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Modal baru untuk menampilkan detail generik -->
     <div id="detailModal" class="modal-overlay">
