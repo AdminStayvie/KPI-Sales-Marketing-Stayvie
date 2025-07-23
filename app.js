@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.3.0 - [MODIFIED] Menyesuaikan logika kartu KPI untuk menampilkan progres harian, mingguan, dan periode berjalan dengan semua status data.
+ * @version 7.4.0 - [MODIFIED] Mengganti detail target dengan laporan kinerja rinci mingguan (carousel).
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -59,6 +59,7 @@ const CONFIG = {
 let currentData = { settings: {}, kpiSettings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
+let performanceReportWeekOffset = 0; // State untuk carousel
 
 // =================================================================================
 // FUNGSI PENGAMBILAN & PENGIRIMAN DATA
@@ -86,6 +87,7 @@ async function loadInitialData() {
                 currentData[key] = result.data[key] || [];
             }
             showMessage("Data berhasil dimuat.", "success");
+            performanceReportWeekOffset = 0; // Reset carousel ke minggu pertama
             updateAllUI();
         } else {
             throw new Error(result.message);
@@ -197,16 +199,13 @@ function updateAllUI() {
         updateAllSummaries();
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
+        renderPerformanceReport(); // [MODIFIED] Panggil fungsi baru
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
     }
 }
 
-/**
- * [FUNGSI DIPERBARUI]
- * Filter data berdasarkan status validasi (case-insensitive).
- */
 function getFilteredData(dataType, validationFilter = ['approved']) {
     const data = currentData[dataType] || [];
     if (!Array.isArray(data)) return [];
@@ -217,52 +216,24 @@ function getFilteredData(dataType, validationFilter = ['approved']) {
     return data.filter(item => item && item.validationStatus && lowerCaseFilter.includes(item.validationStatus.toLowerCase()));
 }
 
-function calculateAchievementForTarget(target, validationFilter) {
-    if (!target || !target.dataKey) return 0;
-    const data = getFilteredData(target.dataKey, validationFilter);
-    return data.length;
-}
-
-/**
- * [FUNGSI BARU] Menghitung progres untuk kartu KPI utama.
- * Fungsi ini menghitung semua data (tanpa filter status) dalam rentang waktu tertentu.
- * @param {string} dataKey - Kunci data dari objek CONFIG (e.g., 'leads').
- * @param {Date} startDate - Tanggal mulai rentang waktu.
- * @param {Date} endDate - Tanggal akhir rentang waktu.
- * @returns {number} Jumlah item yang tercapai.
- */
 function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
     const data = currentData[dataKey] || [];
     if (!Array.isArray(data)) return 0;
-
     return data.filter(item => {
         if (!item || !item.timestamp) return false;
         const itemDate = new Date(item.timestamp);
-        // Memastikan tanggal valid sebelum membandingkan
         return !isNaN(itemDate.getTime()) && itemDate >= startDate && itemDate <= endDate;
     }).length;
 }
 
-
-/**
- * [FUNGSI DIMODIFIKASI] Menghitung ulang progres untuk kartu KPI.
- * - Harian: Menghitung progres HARI INI.
- * - Mingguan: Menghitung progres MINGGU INI (Senin-Minggu).
- * - Bulanan: Menghitung progres PERIODE INI (sesuai filter).
- * Semua perhitungan untuk kartu ini menyertakan semua status data (pending/approved/rejected).
- */
 function updateDashboard() {
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const kpiSettings = currentData.kpiSettings || {};
 
-    // --- Kalkulasi Progress untuk Kartu KPI Utama (Semua Status) ---
-
-    // 1. Target Harian (Progress Hari Ini)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-
     let dailyAchieved = 0;
     let dailyTotal = 0;
     CONFIG.targets.daily.forEach(target => {
@@ -273,13 +244,11 @@ function updateDashboard() {
     });
     updateProgressBar('daily', dailyAchieved, dailyTotal);
 
-    // 2. Target Mingguan (Progress Minggu Ini)
     const now = new Date();
-    const weekStart = getWeekStart(now); // Fungsi dari utils.js (Senin)
+    const weekStart = getWeekStart(now);
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6); // Minggu
+    weekEnd.setDate(weekEnd.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
-
     let weeklyAchieved = 0;
     let weeklyTotal = 0;
     CONFIG.targets.weekly.forEach(target => {
@@ -290,24 +259,17 @@ function updateDashboard() {
     });
     updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
 
-    // 3. Target Bulanan (Progress Periode Ini)
     let monthlyAchieved = 0;
     let monthlyTotal = 0;
     CONFIG.targets.monthly.forEach(target => {
         if (kpiSettings[target.id] !== false) {
-            // Progres bulanan dihitung dari semua data yang ada di `currentData`,
-            // karena `currentData` sudah berisi data untuk periode yang dipilih.
             const allDataForTargetInPeriod = currentData[target.dataKey] || [];
             monthlyAchieved += allDataForTargetInPeriod.length;
             monthlyTotal += target.target;
         }
     });
     updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
-
-    // --- Bagian ini tetap sama, karena untuk Detail Target berdasarkan data ter-approve ---
-    updateTargetBreakdown();
 }
-
 
 function calculateAndDisplayPenalties() {
     const potentialPenaltyEl = document.getElementById('potentialPenalty');
@@ -368,34 +330,9 @@ function calculatePenaltyForValidationStatus(validationFilter) {
     return totalPenalty;
 }
 
-function updateTargetBreakdown() {
-    const container = document.getElementById('targetBreakdown');
-    if (!container) return;
-    container.innerHTML = '';
-    const kpiSettings = currentData.kpiSettings || {};
-
-    ['daily', 'weekly', 'monthly'].forEach(period => {
-        const header = document.createElement('h4');
-        header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
-        container.appendChild(header);
-        CONFIG.targets[period].forEach(target => {
-            if (kpiSettings[target.id] !== false) {
-                const achieved = calculateAchievementForTarget(target, ['approved']);
-                const status = achieved >= target.target ? 'completed' : 'pending';
-                container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
-            }
-        });
-    });
-}
-
-/**
- * [FUNGSI DIPERBARUI]
- * Menghitung status validasi (case-insensitive).
- */
 function updateValidationBreakdown() {
     const container = document.getElementById('validationBreakdown');
     if (!container) return;
-
     let total = 0, approved = 0, pending = 0, rejected = 0;
     Object.keys(CONFIG.dataMapping).forEach(dataKey => {
         const data = currentData[dataKey] || [];
@@ -411,7 +348,6 @@ function updateValidationBreakdown() {
             });
         }
     });
-
     container.innerHTML = `
         <div class="validation-stats">
             <div class="stat-item approved"><strong>${approved}</strong> Disetujui</div>
@@ -433,6 +369,102 @@ function updateProgressBar(type, achieved, total) {
     if (achievedText) achievedText.textContent = achieved;
     if (totalText) totalText.textContent = total;
 }
+
+// =================================================================================
+// [NEW] LAPORAN KINERJA RINCI (PENGGANTI DETAIL TARGET)
+// =================================================================================
+
+function renderPerformanceReport() {
+    const table = document.getElementById('performanceTable');
+    const kpiSettings = currentData.kpiSettings || {};
+    if (!table) return;
+
+    // 1. Dapatkan tanggal untuk tampilan minggu ini
+    const periodDates = getDatesForPeriod();
+    if (periodDates.length === 0) {
+        table.innerHTML = '<tr><td>Pilih periode untuk melihat laporan.</td></tr>';
+        return;
+    }
+    const totalWeeks = Math.ceil(periodDates.length / 7);
+    const weekDates = periodDates.slice(performanceReportWeekOffset * 7, (performanceReportWeekOffset * 7) + 7);
+
+    // 2. Pra-kalkulasi hitungan harian (P/A/R)
+    const dailyCounts = {};
+    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly];
+    const dataKeys = allTargets.map(t => t.dataKey);
+
+    dataKeys.forEach(key => {
+        (currentData[key] || []).forEach(item => {
+            if (!item || !item.timestamp) return;
+            const itemDate = new Date(item.timestamp);
+            const dateString = toLocalDateString(itemDate);
+            
+            if (!dailyCounts[dateString]) dailyCounts[dateString] = {};
+            if (!dailyCounts[dateString][key]) dailyCounts[dateString][key] = { P: 0, A: 0, R: 0 };
+            
+            const status = (item.validationStatus || 'pending').toLowerCase();
+            if (status === 'pending') dailyCounts[dateString][key].P++;
+            else if (status === 'approved') dailyCounts[dateString][key].A++;
+            else if (status === 'rejected') dailyCounts[dateString][key].R++;
+        });
+    });
+
+    // 3. Bangun HTML Tabel
+    let tableHeaderHTML = '<thead><tr><th>Target KPI</th>';
+    weekDates.forEach(date => {
+        tableHeaderHTML += `<th>${date.toLocaleDateString('id-ID', { weekday: 'short' })}<br>${date.getDate()}</th>`;
+    });
+    tableHeaderHTML += '</tr></thead>';
+
+    let tableBodyHTML = '<tbody>';
+    ['daily', 'weekly'].forEach(period => {
+        CONFIG.targets[period].forEach(target => {
+            if (kpiSettings[target.id] === false) return;
+            
+            tableBodyHTML += `<tr><td>${target.name} (${target.target})</td>`;
+            weekDates.forEach(date => {
+                let cellContent = '';
+                const dateString = toLocalDateString(date);
+                
+                if (period === 'daily') {
+                    cellContent = isDayOff(date, currentUser.name)
+                        ? '-'
+                        : `<span class="par-cell">${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).P}/${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).A}/${(dailyCounts[dateString]?.[target.dataKey] || {P:0,A:0,R:0}).R}</span>`;
+                } else if (period === 'weekly' && date.getDay() === 0) { // Hanya tampilkan pada hari Minggu
+                    const weekStart = getWeekStart(date);
+                    let weeklyP = 0, weeklyA = 0, weeklyR = 0;
+                    for (let i = 0; i < 7; i++) {
+                        const dayInWeek = new Date(weekStart);
+                        dayInWeek.setDate(dayInWeek.getDate() + i);
+                        const dayString = toLocalDateString(dayInWeek);
+                        const counts = dailyCounts[dayString]?.[target.dataKey] || { P: 0, A: 0, R: 0 };
+                        weeklyP += counts.P;
+                        weeklyA += counts.A;
+                        weeklyR += counts.R;
+                    }
+                    cellContent = `<span class="par-cell">${weeklyP}/${weeklyA}/${weeklyR}</span>`;
+                }
+
+                tableBodyHTML += `<td>${cellContent}</td>`;
+            });
+            tableBodyHTML += '</tr>';
+        });
+    });
+    tableBodyHTML += '</tbody>';
+
+    table.innerHTML = tableHeaderHTML + tableBodyHTML;
+
+    // 4. Perbarui Navigasi Carousel
+    document.getElementById('prevWeekBtn').disabled = (performanceReportWeekOffset === 0);
+    document.getElementById('nextWeekBtn').disabled = (performanceReportWeekOffset >= totalWeeks - 1);
+    const startRange = weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'});
+    const endRange = weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'});
+    document.getElementById('weekRangeLabel').textContent = `${startRange} - ${endRange}`;
+}
+
+// =================================================================================
+// FUNGSI TABEL & RINGKASAN DATA LAMA
+// =================================================================================
 
 function updateAllSummaries() {
     updateLeadTabs();
@@ -619,7 +651,7 @@ function openDetailModal(itemId, dataKey) {
 // =================================================================================
 
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) return true;
+    if (date.getDay() === 0) return true; // Minggu selalu libur
     const dateString = toLocalDateString(date);
     const timeOffData = currentData.timeOff || [];
     if (!Array.isArray(timeOffData)) return false;
@@ -650,6 +682,23 @@ function setupEventListeners() {
             document.getElementById(button.dataset.tab).classList.add('active');
         });
     });
+
+    // Event listener untuk navigasi carousel
+    document.getElementById('prevWeekBtn').addEventListener('click', () => {
+        if (performanceReportWeekOffset > 0) {
+            performanceReportWeekOffset--;
+            renderPerformanceReport();
+        }
+    });
+
+    document.getElementById('nextWeekBtn').addEventListener('click', () => {
+        const periodDates = getDatesForPeriod();
+        const totalWeeks = Math.ceil(periodDates.length / 7);
+        if (performanceReportWeekOffset < totalWeeks - 1) {
+            performanceReportWeekOffset++;
+            renderPerformanceReport();
+        }
+    });
 }
 
 function initializeApp() {
@@ -658,7 +707,10 @@ function initializeApp() {
     updateDateTime();
     setInterval(updateDateTime, 60000);
     setupEventListeners();
-    setupFilters(loadInitialData);
+    setupFilters(() => {
+        performanceReportWeekOffset = 0; // Reset carousel saat filter berubah
+        loadInitialData();
+    });
     loadInitialData();
 }
 
