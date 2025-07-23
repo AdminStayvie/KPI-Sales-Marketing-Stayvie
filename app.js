@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.5.0 - Mengubah Detail Target menjadi Carousel Mingguan.
+ * @version 7.6.0 - Mengubah tampilan Laporan Rinci menjadi format P/A/R.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -61,9 +61,9 @@ CONFIG.dataMapping = {
 let currentData = { settings: {}, kpiSettings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
-let currentWeekOffset = 0; // [NEW] State untuk carousel
+let currentWeekOffset = 0;
 
-// ... (Salin semua fungsi dari 'FUNGSI PENGAMBILAN & PENGIRIMAN DATA' hingga sebelum 'FUNGSI UTAMA UI & PERHITUNGAN' dari file app.js Anda sebelumnya)
+// ... (Salin semua fungsi dari 'FUNGSI PENGAMBILAN & PENGIRIMAN DATA' hingga sebelum 'FUNGSI LAPORAN RINCI (CAROUSEL)')
 // =================================================================================
 // FUNGSI PENGAMBILAN & PENGIRIMAN DATA
 // =================================================================================
@@ -203,7 +203,7 @@ function updateAllUI() {
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
         updateTodayProgress();
-        renderDetailedReport(); // [MODIFIED] Panggil fungsi render tabel baru
+        renderDetailedReport(); 
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
@@ -227,7 +227,6 @@ function updateDashboard() {
     updateWeeklyCutoffProgress();
 }
 
-// ... (Salin semua fungsi lainnya dari file app.js Anda sebelumnya, KECUALI 'updateTargetBreakdown')
 function updateTodayProgress() {
     const container = document.getElementById('todayProgressBreakdown');
     if (!container) return;
@@ -501,9 +500,13 @@ function generateLeadRow(item, dataKey, mapping) {
 
 
 // =================================================================================
-// FUNGSI LAPORAN RINCI (CAROUSEL) [BARU]
+// FUNGSI LAPORAN RINCI (CAROUSEL) [MODIFIED]
 // =================================================================================
 
+/**
+ * [FUNGSI DIPERBARUI]
+ * Merender tabel laporan rinci dengan format P/A/R sesuai permintaan.
+ */
 function renderDetailedReport() {
     const container = document.getElementById('detailedReportContainer');
     const weekRangeDisplay = document.getElementById('weekRangeDisplay');
@@ -512,20 +515,17 @@ function renderDetailedReport() {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
 
-    // Tentukan tanggal awal minggu yang akan ditampilkan
     const today = new Date();
     const currentWeekStart = getWeekStart(today);
     let displayWeekStart = new Date(currentWeekStart);
     displayWeekStart.setDate(displayWeekStart.getDate() + (currentWeekOffset * 7));
 
-    // Batasi navigasi agar tidak keluar dari periode
     document.getElementById('prevWeekBtn').disabled = displayWeekStart <= getWeekStart(periodStartDate);
     
     let nextWeekStart = new Date(displayWeekStart);
     nextWeekStart.setDate(nextWeekStart.getDate() + 7);
     document.getElementById('nextWeekBtn').disabled = nextWeekStart > periodEndDate;
 
-    // Buat array 7 hari untuk minggu yang ditampilkan
     const weekDates = [];
     for (let i = 0; i < 7; i++) {
         const date = new Date(displayWeekStart);
@@ -556,12 +556,17 @@ function renderDetailedReport() {
             const pending = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'pending').length;
             const rejected = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'rejected').length;
 
-            tableHTML += `<td class="status-cell">
-                ${approved > 0 ? `<div class="status-line approved"><span>Appr:</span><span>${approved}</span></div>` : ''}
-                ${pending > 0 ? `<div class="status-line pending"><span>Pend:</span><span>${pending}</span></div>` : ''}
-                ${rejected > 0 ? `<div class="status-line rejected"><span>Rej:</span><span>${rejected}</span></div>` : ''}
-                ${dataForDate.length === 0 ? '-' : ''}
-            </td>`;
+            if (dataForDate.length === 0) {
+                 tableHTML += `<td class="status-cell">-</td>`;
+            } else {
+                 tableHTML += `<td class="status-cell">
+                    <span class="pending">${pending}</span>
+                    <span class="divider">/</span>
+                    <span class="approved">${approved}</span>
+                    <span class="divider">/</span>
+                    <span class="rejected">${rejected}</span>
+                </td>`;
+            }
         });
         tableHTML += '</tr>';
     });
@@ -576,7 +581,6 @@ function renderDetailedReport() {
 // =================================================================================
 
 function setupEventListeners() {
-    // ... (event listener lainnya tidak berubah)
     document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
     document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -594,7 +598,6 @@ function setupEventListeners() {
         });
     });
 
-    // [NEW] Event listener untuk navigasi carousel
     document.getElementById('prevWeekBtn').addEventListener('click', () => {
         currentWeekOffset--;
         renderDetailedReport();
@@ -612,7 +615,7 @@ function initializeApp() {
     setInterval(updateDateTime, 60000);
     setupEventListeners();
     setupFilters(() => {
-        currentWeekOffset = 0; // Reset offset saat filter berubah
+        currentWeekOffset = 0; 
         loadInitialData();
     });
     loadInitialData();
@@ -620,7 +623,6 @@ function initializeApp() {
 
 document.addEventListener('DOMContentLoaded', initializeApp);
 
-// ... (Salin semua fungsi modal dan utilitas lainnya dari file app.js Anda sebelumnya)
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
