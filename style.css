@@ -1416,20 +1416,19 @@ input:checked + .toggle-slider:before {
     z-index: 1;
 }
 
+/* [MODIFIED] CSS untuk format P/A/R */
 .performance-table .status-cell {
     font-weight: bold;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px;
+    font-size: 14px;
+    padding: 12px 8px;
 }
 
-.status-line {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
+.status-cell .approved { color: var(--color-success); }
+.status-cell .pending { color: var(--color-warning); }
+.status-cell .rejected { color: var(--color-error); }
+.status-cell .divider {
+    color: var(--color-border);
+    margin: 0 2px;
 }
-.status-line.approved { color: var(--color-success); }
-.status-line.pending { color: var(--color-warning); }
-.status-line.rejected { color: var(--color-error); }
+
 
