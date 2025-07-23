@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.3.0 - [FEAT] Melengkapi detail modal untuk data Deal di Pusat Validasi.
+ * @version 6.4.0 - [FEAT] Mengubah Pusat Validasi menjadi format tab per sales.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -11,7 +11,6 @@ if (currentUser.role !== 'management') { alert('Akses ditolak. Halaman ini hanya
 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
 
-// [MODIFIED] Melengkapi detailLabels untuk semua jenis Deal
 const CONFIG = {
     dataMapping: {
         'Leads': { dataKey: 'leads', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
@@ -316,78 +315,118 @@ function updateTeamValidationBreakdown() {
 // =================================================================================
 
 async function loadPendingEntries() {
-    const container = document.getElementById('validationContainer');
-    if (!container) return;
-    container.innerHTML = '<p>Memuat data yang perlu divalidasi...</p>';
+    const tabsContainer = document.getElementById('validationTabsContainer');
+    const contentContainer = document.getElementById('validationTabContentContainer');
+    if (!tabsContainer || !contentContainer) return;
     
+    tabsContainer.innerHTML = '<p>Memuat data...</p>';
+    contentContainer.innerHTML = '';
+
     try {
         const response = await fetch(`${SCRIPT_URL}?action=getPendingEntries&t=${new Date().getTime()}`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
             pendingEntries = result.data;
-            renderValidationCenter(pendingEntries);
+            renderValidationTabs(pendingEntries);
         } else {
             throw new Error(result.message);
         }
     } catch (error) {
-        container.innerHTML = `<p class="message error">Gagal memuat data: ${error.message}</p>`;
+        tabsContainer.innerHTML = `<p class="message error">Gagal memuat data: ${error.message}</p>`;
     }
 }
 
-function renderValidationCenter(data) {
-    const container = document.getElementById('validationContainer');
-    if (!container) return;
-    container.innerHTML = '';
+function renderValidationTabs(data) {
+    const tabsContainer = document.getElementById('validationTabsContainer');
+    const contentContainer = document.getElementById('validationTabContentContainer');
+    tabsContainer.innerHTML = '';
+    contentContainer.innerHTML = '';
 
-    if (Object.keys(data).length === 0) {
-        container.innerHTML = '<p class="message success">Tidak ada data yang perlu divalidasi saat ini. Kerja bagus!</p>';
-        document.getElementById('pendingCountBadge').style.display = 'none';
-        return;
-    }
+    const pendingBySales = {};
+    let totalPendingAll = 0;
 
-    let totalPending = 0;
     for (const sheetName in data) {
-        const items = data[sheetName];
-        if (!Array.isArray(items)) continue;
-        totalPending += items.length;
-        const card = document.createElement('div');
-        card.className = 'card';
-        
-        let tableHTML = `
-            <div class="card__header"><h3>${sheetName} (${items.length} pending)</h3></div>
-            <div class="card__body performance-table-wrapper">
-                <table class="validation-table">
-                    <thead><tr><th>Waktu</th><th>Sales</th><th>Detail Utama</th><th>Aksi</th></tr></thead>
-                    <tbody>`;
-        
-        items.forEach(item => {
-            if (!item) return;
-            const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
-            tableHTML += `
-                <tr>
-                    <td>${item.datestamp || new Date(item.timestamp).toLocaleDateString()}</td>
-                    <td>${item.sales}</td>
-                    <td>${mainDetail}</td>
-                    <td class="validation-actions">
-                        <button class="btn btn--sm btn--outline" onclick="openDetailModal('${item.id}', '${sheetName}')">Detail</button>
-                        <button class="btn btn--sm btn--primary" onclick="handleValidation('${sheetName}', '${item.id}', 'approve')">Approve</button>
-                        <button class="btn btn--sm btn--secondary" onclick="handleValidation('${sheetName}', '${item.id}', 'reject')">Reject</button>
-                    </td>
-                </tr>`;
+        data[sheetName].forEach(item => {
+            if (!item || !item.sales) return;
+            if (!pendingBySales[item.sales]) {
+                pendingBySales[item.sales] = { total: 0, items: {} };
+            }
+            if (!pendingBySales[item.sales].items[sheetName]) {
+                pendingBySales[item.sales].items[sheetName] = [];
+            }
+            pendingBySales[item.sales].items[sheetName].push(item);
+            pendingBySales[item.sales].total++;
+            totalPendingAll++;
         });
-
-        tableHTML += `</tbody></table></div>`;
-        card.innerHTML = tableHTML;
-        container.appendChild(card);
     }
+
     const pendingBadge = document.getElementById('pendingCountBadge');
-    if (totalPending > 0) {
-        pendingBadge.textContent = totalPending;
+    if (totalPendingAll > 0) {
+        pendingBadge.textContent = totalPendingAll;
         pendingBadge.style.display = 'inline-flex';
     } else {
         pendingBadge.style.display = 'none';
+        tabsContainer.innerHTML = '<p class="message success">Tidak ada data yang perlu divalidasi saat ini. Kerja bagus!</p>';
+        return;
     }
+
+    let isFirstTab = true;
+    for (const salesName in pendingBySales) {
+        const salesData = pendingBySales[salesName];
+        const tabId = `validation-tab-${salesName.replace(/\s+/g, '')}`;
+        const contentId = `validation-content-${salesName.replace(/\s+/g, '')}`;
+
+        const tabButton = document.createElement('button');
+        tabButton.className = `tab-button ${isFirstTab ? 'active' : ''}`;
+        tabButton.dataset.tab = contentId;
+        tabButton.innerHTML = `${salesName} <span class="pending-badge">${salesData.total}</span>`;
+        tabsContainer.appendChild(tabButton);
+
+        const contentDiv = document.createElement('div');
+        contentDiv.id = contentId;
+        contentDiv.className = `tab-content ${isFirstTab ? 'active' : ''}`;
+        
+        for (const sheetName in salesData.items) {
+            const items = salesData.items[sheetName];
+            const card = document.createElement('div');
+            card.className = 'card';
+            let tableHTML = `
+                <div class="card__header"><h3>${sheetName} (${items.length} pending)</h3></div>
+                <div class="card__body performance-table-wrapper">
+                    <table class="validation-table">
+                        <thead><tr><th>Waktu</th><th>Detail Utama</th><th>Aksi</th></tr></thead>
+                        <tbody>`;
+            items.forEach(item => {
+                const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
+                tableHTML += `
+                    <tr>
+                        <td>${item.datestamp || new Date(item.timestamp).toLocaleDateString()}</td>
+                        <td>${mainDetail}</td>
+                        <td class="validation-actions">
+                            <button class="btn btn--sm btn--outline" onclick="openDetailModal('${item.id}', '${sheetName}')">Detail</button>
+                            <button class="btn btn--sm btn--primary" onclick="handleValidation('${sheetName}', '${item.id}', 'approve')">Approve</button>
+                            <button class="btn btn--sm btn--secondary" onclick="handleValidation('${sheetName}', '${item.id}', 'reject')">Reject</button>
+                        </td>
+                    </tr>`;
+            });
+            tableHTML += `</tbody></table></div>`;
+            card.innerHTML = tableHTML;
+            contentDiv.appendChild(card);
+        }
+        contentContainer.appendChild(contentDiv);
+        isFirstTab = false;
+    }
+
+    document.querySelectorAll('#validationTabsContainer .tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('#validationTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#validationTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
 }
+
 
 async function handleValidation(sheetName, id, type) {
     let notes = '';
