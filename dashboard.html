@@ -94,41 +94,20 @@
         <main class="main-content">
             <div id="dashboard" class="content-page active">
                 <div class="page-header"><h2>Dashboard KPI</h2></div>
-                
+                <!-- [MODIFIED] Grid KPI diperbarui dengan kartu validasi dan denda -->
                 <div class="kpi-grid">
-                    <div class="card kpi-card"><div class="card__body"><h3>Progress Minggu Ini</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="weeklyProgress"></div></div><span id="weeklyPercentage">0%</span></div><div class="kpi-details"><span id="weeklyAchieved">0</span> / <span id="weeklyTotal">0</span></div></div></div>
-                    <div class="card kpi-card"><div class="card__body"><h3>Akumulasi Bulanan</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="monthlyProgress"></div></div><span id="monthlyPercentage">0%</span></div><div class="kpi-details"><span id="monthlyAchieved">0</span> / <span id="monthlyTotal">0</span></div></div></div>
+                    <div class="card kpi-card"><div class="card__body"><h3>Target Harian</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="dailyProgress"></div></div><span id="dailyPercentage">0%</span></div><div class="kpi-details"><span id="dailyAchieved">0</span> / <span id="dailyTotal">0</span></div></div></div>
+                    <div class="card kpi-card"><div class="card__body"><h3>Target Mingguan</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="weeklyProgress"></div></div><span id="weeklyPercentage">0%</span></div><div class="kpi-details"><span id="weeklyAchieved">0</span> / <span id="weeklyTotal">0</span></div></div></div>
+                    <div class="card kpi-card"><div class="card__body"><h3>Target Bulanan</h3><div class="kpi-progress"><div class="progress-bar"><div class="progress-fill" id="monthlyProgress"></div></div><span id="monthlyPercentage">0%</span></div><div class="kpi-details"><span id="monthlyAchieved">0</span> / <span id="monthlyTotal">0</span></div></div></div>
                     <div class="card penalty-card" style="background: linear-gradient(135deg, var(--color-warning), var(--color-orange-400));"><div class="card__body"><h3>Potensi Denda</h3><div class="penalty-amount" id="potentialPenalty">Rp 0</div><p style="color: white; opacity: 0.8; font-size: 12px; margin-top: 4px;">Berdasarkan semua data (termasuk pending)</p></div></div>
                     <div class="card penalty-card"><div class="card__body"><h3>Denda Final</h3><div class="penalty-amount" id="finalPenalty">Rp 0</div><p style="color: white; opacity: 0.8; font-size: 12px; margin-top: 4px;">Berdasarkan data yang sudah di-approve</p></div></div>
                 </div>
-
-                <div class="card target-details" style="margin-bottom: var(--space-32);">
-                    <div class="card__body">
-                        <h3>Progress Hari Ini (Cutoff Harian)</h3>
-                        <div id="todayProgressBreakdown"></div>
-                    </div>
-                </div>
-
+                <!-- [NEW] Kartu untuk status validasi -->
                 <div class="card validation-summary-card" style="margin-bottom: var(--space-32);"><div class="card__body"><h3>Status Validasi Data Periode Ini</h3><div id="validationBreakdown"></div></div></div>
-                
-                <div class="card">
-                    <div class="card__body">
-                        <div class="carousel-header">
-                            <h3>Laporan Kinerja Rinci</h3>
-                            <div class="carousel-nav">
-                                <button id="prevWeekBtn" class="btn btn--sm btn--outline">&lt;</button>
-                                <span id="weekRangeDisplay"></span>
-                                <button id="nextWeekBtn" class="btn btn--sm btn--outline">&gt;</button>
-                            </div>
-                        </div>
-                        <div id="detailedReportContainer" class="performance-table-wrapper">
-                            <!-- Tabel laporan rinci akan dirender di sini oleh JavaScript -->
-                        </div>
-                    </div>
-                </div>
-
+                <div class="card target-details"><div class="card__body"><h3>Detail Target (Berdasarkan Data Ter-approve)</h3><div id="targetBreakdown"></div></div></div>
             </div>
 
+            <!-- Input Lead Page -->
             <div id="input-lead" class="content-page">
                 <div class="page-header"><h2>Input Lead</h2></div>
                 <div class="form-container">
@@ -137,19 +116,12 @@
                         <div class="form-group"><label class="form-label">Sumber Lead</label><select name="leadSource" class="form-control" required><option value="">Pilih Sumber</option><option value="Cekat">Cekat</option><option value="Sosmed">Sosmed</option><option value="Walk-in">Walk-in</option><option value="Canvasing">Canvasing</option></select></div>
                         <div class="form-group"><label class="form-label">Produk yang Diminati</label>
                             <select name="product" class="form-control" required>
-                                <option value="">Pilih Produk</option>
-                                <option value="Kamar Hotel">Kamar Hotel</option>
-                                <option value="Kamar Hotel B2B">Kamar Hotel B2B</option>
-                                <option value="Venue">Venue</option>
-                                <option value="Co-Living">Co-Living</option>
-                                <option value="Package">Package</option>
+                                <option value="">Pilih Produk</option><option value="Kamar Hotel">Kamar Hotel</option><option value="Kamar Hotel B2B">Kamar Hotel B2B</option>
+                                <option value="Venue">Venue</option><option value="Co-Living">Co-Living</option><option value="Package">Package</option>
                             </select>
                         </div>
                         <div class="form-group"><label class="form-label">No Kontak (HP/Email)</label><input type="text" name="contact" class="form-control" required></div>
-                        <div class="form-group">
-                            <label for="proofOfLead" class="form-label">Bukti Lead (Screenshot, dll)</label>
-                            <input type="file" id="proofOfLead" name="proofOfLead" class="form-control" accept="image/*,.pdf">
-                        </div>
+                        <div class="form-group"><label for="proofOfLead" class="form-label">Bukti Lead (Screenshot, dll)</label><input type="file" id="proofOfLead" name="proofOfLead" class="form-control" accept="image/*,.pdf"></div>
                         <div class="form-group"><label class="form-label">Catatan Awal</label><textarea name="notes" class="form-control" rows="3" placeholder="Contoh: cold/warm/hot"></textarea></div>
                         <button type="submit" class="btn btn--primary">Simpan Lead</button>
                     </form>
@@ -168,6 +140,7 @@
                 </div>
             </div>
 
+            <!-- Halaman Input Lainnya (Struktur tetap sama) -->
             <div id="upload-canvasing" class="content-page"><div class="page-header"><h2>Upload Meeting Canvasing & Pitching</h2></div><div class="form-container"><form id="canvasingForm" class="kpi-form" data-sheet-name="Canvasing"><div class="form-group"><label class="form-label">Judul Meeting</label><input type="text" name="meetingTitle" class="form-control" required></div><div class="form-group"><label class="form-label">File PPT/Dokumen</label><input type="file" name="document" class="form-control" accept=".ppt,.pptx,.pdf"></div><div class="form-group"><label class="form-label">Catatan</label><textarea name="notes" class="form-control" rows="3"></textarea></div><button type="submit" class="btn btn--primary">Upload</button></form></div><div class="data-summary"><h3>Riwayat Upload Canvasing</h3><div id="canvasingSummary" class="summary-table"></div></div></div>
             <div id="upload-promosi" class="content-page"><div class="page-header"><h2>Upload Promosi Campaign Package</h2></div><div class="form-container"><form id="promosiForm" class="kpi-form" data-sheet-name="Promosi"><div class="form-group"><label class="form-label">Nama Campaign</label><input type="text" name="campaignName" class="form-control" required></div><div class="form-group"><label class="form-label">Screenshot Promosi</label><input type="file" name="screenshot" class="form-control" accept="image/*"></div><div class="form-group"><label class="form-label">Platform</label><select name="platform" class="form-control" required><option value="">Pilih Platform</option><option value="Instagram">Instagram</option><option value="Facebook">Facebook</option><option value="Website">Website</option><option value="WhatsApp">WhatsApp</option></select></div><button type="submit" class="btn btn--primary">Upload</button></form></div><div class="data-summary"><h3>Riwayat Upload Promosi</h3><div id="promosiSummary" class="summary-table"></div></div></div>
             <div id="door-to-door" class="content-page"><div class="page-header"><h2>Door-to-door Perusahaan</h2></div><div class="form-container"><form id="doorToDoorForm" class="kpi-form" data-sheet-name="DoorToDoor"><div class="form-group"><label class="form-label">Tanggal Kunjungan</label><input type="date" name="visitDate" class="form-control" required></div><div class="form-group"><label class="form-label">Nama Instansi</label><input type="text" name="institutionName" class="form-control" required></div><div class="form-group"><label class="form-label">Alamat Lengkap Instansi</label><textarea name="address" class="form-control" rows="2" required></textarea></div><div class="form-group"><label class="form-label">Nama PIC Instansi</label><input type="text" name="picName" class="form-control" required></div><div class="form-group"><label class="form-label">Nomor HP PIC</label><input type="text" name="picPhone" class="form-control" required></div><div class="form-group"><label class="form-label">Hasil Respons Kunjungan</label><textarea name="response" class="form-control" rows="3" required></textarea></div><div class="form-group"><label class="form-label">Bukti Kunjungan</label><input type="file" name="proof" class="form-control" accept="image/*"></div><button type="submit" class="btn btn--primary">Simpan</button></form></div><div class="data-summary"><h3>Rekap Door-to-door</h3><div id="doorToDoorSummary" class="summary-table"></div></div></div>
@@ -181,6 +154,7 @@
         </main>
     </div>
 
+    <!-- Modal untuk Update Status Lead -->
     <div id="updateLeadModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header"><h3>Update Status Lead</h3><button class="close-button" onclick="closeModal()">&times;</button></div>
@@ -195,6 +169,7 @@
         </div>
     </div>
 
+    <!-- Modal baru untuk menampilkan detail generik -->
     <div id="detailModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header"><h3 id="detailModalTitle">Detail Data</h3><button class="close-button" onclick="closeDetailModal()">&times;</button></div>
