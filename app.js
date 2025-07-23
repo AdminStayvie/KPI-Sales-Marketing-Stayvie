@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.6.0 - [FIX] Memperbaiki bug tombol simpan yang tidak merespon dan modal detail pada tab Deal.
+ * @version 7.7.0 - [FEAT] Menambahkan input bukti deal pada modal update status.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -40,9 +40,9 @@ const CONFIG = {
     dataMapping: {
         'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
         'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
         'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
         'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
@@ -170,7 +170,7 @@ async function handleFormSubmit(e) {
     sendData('saveData', payload, e);
 }
 
-function handleUpdateLead(e) {
+async function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
     const leadId = form.querySelector('#updateLeadId').value;
@@ -178,12 +178,29 @@ function handleUpdateLead(e) {
     const statusLog = form.querySelector('#statusLog').value;
     
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
-    const leadData = allLeadsAndProspects.find(item => item && item.id === leadId);
+    const leadData = { ...allLeadsAndProspects.find(item => item && item.id === leadId) };
 
     if (!leadData) {
         showMessage('Data asli untuk diupdate tidak ditemukan!', 'error');
         return;
     }
+
+    // [MODIFIED] Handle file upload for proof of deal
+    if (newStatus === 'Deal') {
+        const proofInput = form.querySelector('#modalProofOfDeal');
+        if (proofInput && proofInput.files.length > 0) {
+            const file = proofInput.files[0];
+            leadData.proofOfDeal = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        } else {
+            showMessage('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".', 'error');
+            return;
+        }
+    }
+
     const originalLeadId = leadData.id.startsWith('prospect_') ? leadData.id.replace('prospect_', 'item_') : leadData.id;
     const payload = { leadId: originalLeadId, newStatus, statusLog, leadData };
     sendData('updateLeadStatus', payload, e);
@@ -500,7 +517,7 @@ function updateSimpleSummaryTable(dataKey, mapping, container) {
         return;
     }
     const rowGenerator = window[mapping.rowGenerator];
-    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
@@ -551,7 +568,7 @@ function renderLeadTable(container, data, dataKey) {
     }
     const headers = mapping.headers;
     const rowGenerator = window[mapping.rowGenerator];
-    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>${data.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>${data.slice().reverse().map(item => item ? rowGenerator(item, dataKey) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
@@ -619,17 +636,37 @@ function openUpdateModal(leadId) {
     document.getElementById('updateLeadId').value = lead.id;
     document.getElementById('modalCustomerName').textContent = lead.customerName;
     const statusSelect = document.getElementById('updateStatus');
+    const proofContainer = document.getElementById('proofOfDealContainer');
+    const proofInput = document.getElementById('modalProofOfDeal');
+    
     statusSelect.innerHTML = '';
     const currentStatus = lead.status || 'Lead';
     document.getElementById('modalCurrentStatus').textContent = currentStatus;
     const statusElement = document.getElementById('modalCurrentStatus');
     statusElement.className = `status status--${currentStatus.toLowerCase().replace(/\s+/g, '-')}`;
     statusElement.style.paddingLeft = '0';
+    
     if (currentStatus === 'Lead') {
         statusSelect.innerHTML = `<option value="Prospect">Prospect</option><option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     } else if (currentStatus === 'Prospect') {
         statusSelect.innerHTML = `<option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     }
+
+    // [MODIFIED] Show/hide proof of deal input based on selection
+    const toggleProofVisibility = () => {
+        if (statusSelect.value === 'Deal') {
+            proofContainer.style.display = 'block';
+            proofInput.required = true;
+        } else {
+            proofContainer.style.display = 'none';
+            proofInput.required = false;
+        }
+    };
+
+    statusSelect.removeEventListener('change', toggleProofVisibility); // Hapus listener lama
+    statusSelect.addEventListener('change', toggleProofVisibility);   // Tambah listener baru
+    toggleProofVisibility(); // Panggil sekali untuk inisialisasi
+
     modal.classList.add('active');
 }
 
