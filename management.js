@@ -230,6 +230,7 @@ function renderTabbedTargetSummary() {
     const periodDates = getDatesForPeriod();
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
+    const kpiSettings = allData.kpiSettings || {};
 
     allSalesUsers.forEach((salesName, index) => {
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
@@ -240,6 +241,7 @@ function renderTabbedTargetSummary() {
         let tableBody = '';
         ['daily', 'weekly', 'monthly'].forEach(period => {
             TARGET_CONFIG[period].forEach(target => {
+                if (kpiSettings[target.id] === false) return;
                 tableBody += `<tr><td>${target.name} (${period.charAt(0)})</td>`;
                 periodDates.forEach(date => {
                     let cellContent = '';
@@ -399,7 +401,7 @@ function renderValidationTabs(data) {
             items.forEach(item => {
                 const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
                 tableHTML += `
-                    <tr>
+                    <tr data-id="${item.id}" data-sheet="${sheetName}">
                         <td>${item.datestamp || new Date(item.timestamp).toLocaleDateString()}</td>
                         <td>${mainDetail}</td>
                         <td class="validation-actions">
@@ -427,7 +429,7 @@ function renderValidationTabs(data) {
     });
 }
 
-// [MODIFIED] Fungsi validasi diubah agar tidak me-refresh halaman
+
 async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
     if (type === 'reject') {
@@ -441,7 +443,6 @@ async function handleValidation(buttonElement, sheetName, id, type) {
     const action = type === 'approve' ? 'approveEntry' : 'rejectEntry';
     const payload = { action, sheetName, id, notes };
 
-    // Disable buttons in the current row to prevent double clicks
     const actionCell = buttonElement.parentElement;
     actionCell.querySelectorAll('button').forEach(btn => btn.disabled = true);
 
@@ -457,7 +458,6 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         if (result.status === 'success') {
             showMessage('Validasi berhasil disimpan.', 'success');
             
-            // Update UI without full refresh
             const row = actionCell.parentElement;
 
             if (type === 'approve') {
@@ -466,7 +466,6 @@ async function handleValidation(buttonElement, sheetName, id, type) {
                 actionCell.innerHTML = `<span class="status status--rejected">Rejected</span>`;
             }
 
-            // Decrement pending counts
             const pendingBadge = document.getElementById('pendingCountBadge');
             if (pendingBadge) {
                 let currentCount = parseInt(pendingBadge.textContent) || 0;
@@ -484,12 +483,10 @@ async function handleValidation(buttonElement, sheetName, id, type) {
                  }
             }
             
-            // Fade out and remove the row after a delay
             setTimeout(() => {
                 row.style.opacity = '0';
                 setTimeout(() => {
                     row.remove();
-                    // Check if a table is now empty and show a message
                     const tableBody = actionCell.closest('tbody');
                     if (tableBody && tableBody.children.length === 0) {
                         const card = tableBody.closest('.card');
@@ -503,7 +500,6 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         }
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
-        // Re-enable buttons on failure
         actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
     }
 }
@@ -632,7 +628,7 @@ function setupTimeOffForm() {
         const date = document.getElementById('timeOffDate').value;
         const sales = salesSelect.value;
         if (!date) { showMessage('Silakan pilih tanggal.', 'error'); return; }
-        const payload = { action: 'saveTimeOff', data: { date, sales } };
+        const payload = { action: 'saveTimeOff', data: { date, sales, id: `timeoff_${Date.now()}` } };
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
         try {
@@ -654,7 +650,7 @@ function renderTimeOffList() {
     const timeOffData = allData.timeOff || [];
     if (!Array.isArray(timeOffData)) return;
     timeOffData.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
-        if (!item) return;
+        if (!item || !item.date) return;
         const li = document.createElement('li');
         const displayDate = new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
         li.innerHTML = `<span>${displayDate} - <strong>${item.sales}</strong></span><button class="delete-btn" data-id="${item.id}">&times;</button>`;
