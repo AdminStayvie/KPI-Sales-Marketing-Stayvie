@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.9.0 - [FIX] Mengintegrasikan status aktif KPI ke laporan kinerja rinci.
+ * @version 8.0.0 - [FEAT] Menambahkan fitur revisi untuk data yang ditolak.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -40,19 +40,19 @@ const CONFIG = {
     dataMapping: {
         'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
-        'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'quotations': { sheetName: 'Quotations', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'surveys': { sheetName: 'Surveys', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'reports': { sheetName: 'Reports', headers: ['Waktu', 'Periode', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'crmSurveys': { sheetName: 'CRMSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'conversions': { sheetName: 'Conversions', headers: ['Waktu', 'Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
+        'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'quotations': { sheetName: 'Quotations', headers: ['Waktu', 'Customer', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'surveys': { sheetName: 'Surveys', headers: ['Waktu', 'Customer', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'reports': { sheetName: 'Reports', headers: ['Waktu', 'Periode', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'crmSurveys': { sheetName: 'CRMSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'conversions': { sheetName: 'Conversions', headers: ['Waktu', 'Event', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
     }
 };
 
@@ -204,6 +204,44 @@ async function handleUpdateLead(e) {
     const payload = { leadId: originalLeadId, newStatus, statusLog, leadData };
     sendData('updateLeadStatus', payload, e);
 }
+
+// [NEW] Fungsi untuk menangani submit revisi
+async function handleRevisionSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const sheetName = form.dataset.sheetName;
+    const id = form.dataset.id;
+    if (!sheetName || !id) return;
+
+    const formData = new FormData(form);
+    const data = {};
+    for (const [key, value] of formData.entries()) {
+        if (value instanceof File && value.size > 0) continue;
+        data[key] = value;
+    }
+
+    const fileInputs = form.querySelectorAll('input[type="file"]');
+    for (const fileInput of fileInputs) {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            data[fileInput.name] = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        }
+    }
+
+    // Tambahkan data yang tidak ada di form tapi dibutuhkan
+    data.id = id;
+    data.sales = currentUser.name;
+    data.timestamp = getLocalTimestampString(); // Update timestamp ke waktu revisi
+    data.datestamp = getDatestamp();
+
+    const payload = { sheetName, id, data };
+    sendData('reviseData', payload, e);
+}
+
 
 // =================================================================================
 // FUNGSI UTAMA UI & PERHITUNGAN
@@ -517,7 +555,7 @@ function updateSimpleSummaryTable(dataKey, mapping, container) {
         return;
     }
     const rowGenerator = window[mapping.rowGenerator];
-    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey) : '').join('')}</tbody></table>`;
+    const tableHTML = `<table><thead><tr><th>${mapping.headers.join('</th><th>')}</th></tr></thead><tbody>${dataToDisplay.slice().reverse().map(item => item ? rowGenerator(item, dataKey, mapping) : '').join('')}</tbody></table>`;
     container.innerHTML = tableHTML;
 }
 
@@ -576,11 +614,17 @@ function generateSimpleRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
     const mainValue = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
+    
+    let actionCell = `<span class="status status--${statusClass}">${validationStatus}</span>`;
+    if (validationStatus.toLowerCase() === 'rejected') {
+        actionCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
+    }
+
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
             <td>${mainValue}</td>
-            <td><span class="status status--${statusClass}">${validationStatus}</span></td>
+            <td>${actionCell}</td>
         </tr>`;
 }
 
@@ -594,13 +638,18 @@ function generateLeadRow(item, dataKey) {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
     
+    let validationCell = `<span class="status status--${validationStatusClass}">${validationStatus}</span>`;
+    if (validationStatus.toLowerCase() === 'rejected') {
+        validationCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
+    }
+
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
             <td>${item.customerName || ''}</td>
             <td>${item.product || ''}</td>
             <td><span class="status status--${statusClass}">${item.status || 'N/A'}</span></td>
-            <td><span class="status status--${validationStatusClass}">${validationStatus}</span></td>
+            <td>${validationCell}</td>
             <td>${actionButton}</td>
         </tr>`;
 }
@@ -609,13 +658,18 @@ function generateDealRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
     
+    let validationCell = `<span class="status status--${validationStatusClass}">${validationStatus}</span>`;
+    if (validationStatus.toLowerCase() === 'rejected') {
+        validationCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
+    }
+
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
             <td>${item.customerName || ''}</td>
             <td>${item.product || ''}</td>
             <td><span class="status status--deal">Deal</span></td>
-            <td><span class="status status--${validationStatusClass}">${validationStatus}</span></td>
+            <td>${validationCell}</td>
             <td>-</td>
         </tr>`;
 }
@@ -669,9 +723,57 @@ function openUpdateModal(leadId) {
     modal.classList.add('active');
 }
 
+// [NEW] Fungsi untuk membuka modal revisi
+function openRevisionModal(itemId, dataKey) {
+    const allData = Object.values(currentData).flat();
+    const item = allData.find(d => d && d.id === itemId);
+    const mapping = CONFIG.dataMapping[dataKey];
+
+    if (!item || !mapping) {
+        showMessage('Data untuk direvisi tidak ditemukan.', 'error');
+        return;
+    }
+
+    const modal = document.getElementById('revisionModal');
+    const formContainer = document.getElementById('revisionForm');
+    const notesText = document.getElementById('rejectionNotesText');
+
+    notesText.textContent = item.validationNotes || 'Tidak ada catatan.';
+    formContainer.innerHTML = ''; // Kosongkan form sebelumnya
+    formContainer.dataset.sheetName = mapping.sheetName;
+    formContainer.dataset.id = item.id;
+
+    // Ambil template form dari halaman input yang sesuai
+    const formTemplate = document.querySelector(`#${dataKey.toLowerCase()} .kpi-form, #input-lead .kpi-form`);
+    if (formTemplate) {
+        formContainer.innerHTML = formTemplate.innerHTML;
+        
+        // Isi form dengan data yang ada
+        for (const key in item) {
+            const input = formContainer.querySelector(`[name="${key}"]`);
+            if (input && input.type !== 'file') {
+                input.value = item[key];
+            }
+        }
+        
+        // Ganti teks tombol submit
+        const submitButton = formContainer.querySelector('button[type="submit"]');
+        if (submitButton) {
+            submitButton.textContent = 'Kirim Ulang untuk Validasi';
+        }
+    } else {
+        formContainer.innerHTML = '<p class="message error">Tidak dapat memuat form revisi.</p>';
+    }
+
+    modal.classList.add('active');
+}
+
+
 function closeModal() {
     document.getElementById('updateLeadModal')?.classList.remove('active');
     document.getElementById('updateLeadForm')?.reset();
+    document.getElementById('revisionModal')?.classList.remove('active');
+    document.getElementById('revisionForm')?.reset();
 }
 
 function closeDetailModal() {
@@ -763,6 +865,7 @@ function setupEventListeners() {
     }));
     document.getElementById('logoutBtn')?.addEventListener('click', logout);
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
+    document.getElementById('revisionForm')?.addEventListener('submit', handleRevisionSubmit);
     
     document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
         button.addEventListener('click', () => {
