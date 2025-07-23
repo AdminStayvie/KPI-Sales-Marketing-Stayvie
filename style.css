@@ -1365,3 +1365,71 @@ input:checked + .toggle-slider:before {
 .validation-actions .btn--sm {
     padding: var(--space-4) var(--space-8);
 }
+
+/* Tambahkan ini di akhir file style.css Anda */
+
+.carousel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-16);
+}
+
+.carousel-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+#weekRangeDisplay {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+}
+
+.performance-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.performance-table th, .performance-table td {
+    border: 1px solid var(--color-border);
+    padding: var(--space-8);
+    text-align: center;
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+
+.performance-table th {
+    background-color: var(--color-secondary);
+    font-weight: 500;
+}
+
+.performance-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+    background-color: var(--color-secondary);
+    width: 250px;
+    white-space: normal;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
+
+.performance-table .status-cell {
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+}
+
+.status-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+}
+.status-line.approved { color: var(--color-success); }
+.status-line.pending { color: var(--color-warning); }
+.status-line.rejected { color: var(--color-error); }
+
