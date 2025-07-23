@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.6.0 - Mengubah tampilan Laporan Rinci menjadi format P/A/R.
+ * @version 7.2.0 - Memperbaiki bug case-sensitive pada perhitungan validasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -37,33 +37,29 @@ const CONFIG = {
             { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns' }
         ]
     },
-    dataMapping: { /* ... Konten tidak berubah ... */ }
-};
-// Salin konten dataMapping dari file app.js Anda sebelumnya ke sini
-CONFIG.dataMapping = {
-    'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-    'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-    'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
-    'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'quotations': { sheetName: 'Quotations', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'surveys': { sheetName: 'Surveys', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'reports': { sheetName: 'Reports', headers: ['Waktu', 'Periode', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'crmSurveys': { sheetName: 'CRMSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'conversions': { sheetName: 'Conversions', headers: ['Waktu', 'Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-    'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+    dataMapping: {
+        'leads': { sheetName: 'Leads', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
+        'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'quotations': { sheetName: 'Quotations', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', productType: 'Jenis Produk', quotationDoc: 'Dokumen', quotationAmount: 'Nominal', description: 'Keterangan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'surveys': { sheetName: 'Surveys', headers: ['Waktu', 'Customer', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', customerName: 'Nama Customer', gender: 'Jenis Kelamin', phone: 'No. Telepon', surveyDate: 'Tanggal Survey', origin: 'Asal', feedback: 'Tanggapan', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'reports': { sheetName: 'Reports', headers: ['Waktu', 'Periode', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', reportPeriod: 'Periode Laporan', reportDoc: 'Dokumen', managementFeedback: 'Feedback', additionalNotes: 'Catatan Tambahan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'crmSurveys': { sheetName: 'CRMSurveys', headers: ['Waktu', 'Kompetitor', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', competitorName: 'Nama Kompetitor', website: 'Website', product: 'Produk', priceDetails: 'Detail Harga', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'conversions': { sheetName: 'Conversions', headers: ['Waktu', 'Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', clientName: 'Nama Client', eventDate: 'Tanggal Event', venueType: 'Jenis Venue', barterValue: 'Nilai Barter', barterDescription: 'Keterangan', barterAgreementFile: 'File Perjanjian', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'events': { sheetName: 'Events', headers: ['Waktu', 'Nama Event', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', eventName: 'Nama Event', eventType: 'Jenis Event', eventDate: 'Tanggal Event', eventLocation: 'Lokasi', organizer: 'Penyelenggara', benefits: 'Hasil/Manfaat', documentation: 'Dokumentasi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'campaigns': { sheetName: 'Campaigns', headers: ['Waktu', 'Judul', 'Status Validasi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', campaignTitle: 'Judul Kampanye', targetMarket: 'Target Pasar', campaignStartDate: 'Tgl Mulai', campaignEndDate: 'Tgl Selesai', conceptDescription: 'Deskripsi', potentialConversion: 'Potensi', budget: 'Budget', campaignMaterial: 'Materi', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+    }
 };
 
 let currentData = { settings: {}, kpiSettings: {} };
 Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
-let currentWeekOffset = 0;
 
-// ... (Salin semua fungsi dari 'FUNGSI PENGAMBILAN & PENGIRIMAN DATA' hingga sebelum 'FUNGSI LAPORAN RINCI (CAROUSEL)')
 // =================================================================================
 // FUNGSI PENGAMBILAN & PENGIRIMAN DATA
 // =================================================================================
@@ -191,7 +187,6 @@ function handleUpdateLead(e) {
     sendData('updateLeadStatus', payload, e);
 }
 
-
 // =================================================================================
 // FUNGSI UTAMA UI & PERHITUNGAN
 // =================================================================================
@@ -202,70 +197,16 @@ function updateAllUI() {
         updateAllSummaries();
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
-        updateTodayProgress();
-        renderDetailedReport(); 
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
     }
 }
 
-function updateDashboard() {
-    document.getElementById('userDisplayName').textContent = currentUser.name;
-    const kpiSettings = currentData.kpiSettings || {};
-
-    let monthlyAchieved = 0;
-    let monthlyTotal = 0;
-    CONFIG.targets.monthly.forEach(target => {
-        if (kpiSettings[target.id] !== false) {
-            monthlyAchieved += calculateAchievementForTarget(target, ['approved']);
-            monthlyTotal += target.target;
-        }
-    });
-    updateProgressBar('monthly', monthlyAchieved, monthlyTotal);
-
-    updateWeeklyCutoffProgress();
-}
-
-function updateTodayProgress() {
-    const container = document.getElementById('todayProgressBreakdown');
-    if (!container) return;
-    container.innerHTML = '';
-    const todayString = new Date().toDateString();
-    const kpiSettings = currentData.kpiSettings || {};
-
-    CONFIG.targets.daily.forEach(target => {
-        if (kpiSettings[target.id] === false) return;
-
-        const achievedToday = (currentData[target.dataKey] || [])
-            .filter(d => d && new Date(d.timestamp).toDateString() === todayString)
-            .length;
-        
-        const percentage = target.target > 0 ? Math.min(100, Math.round((achievedToday / target.target) * 100)) : 0;
-
-        const progressHTML = `
-            <div class="target-item" style="padding: 8px 0;">
-                <div class="target-name" style="flex-basis: 200px;">${target.name}</div>
-                <div class="target-progress" style="flex-grow: 1; margin-left: 16px;">
-                    <div class="kpi-progress" style="margin-bottom: 0;">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${percentage}%; background-color: var(--color-primary);"></div>
-                        </div>
-                        <span style="color: var(--color-text); min-width: 40px; text-align: right;">${percentage}%</span>
-                    </div>
-                    <div class="kpi-details" style="text-align: right; width: 100%; font-size: 12px;">
-                        <span>${achievedToday} / ${target.target}</span>
-                    </div>
-                </div>
-            </div>`;
-        container.innerHTML += progressHTML;
-    });
-
-    if (container.innerHTML === '') {
-        container.innerHTML = '<p>Tidak ada target harian yang aktif.</p>';
-    }
-}
-
+/**
+ * [FUNGSI DIPERBARUI]
+ * Filter data berdasarkan status validasi (case-insensitive).
+ */
 function getFilteredData(dataType, validationFilter = ['approved']) {
     const data = currentData[dataType] || [];
     if (!Array.isArray(data)) return [];
@@ -282,28 +223,23 @@ function calculateAchievementForTarget(target, validationFilter) {
     return data.length;
 }
 
-function updateWeeklyCutoffProgress() {
+function updateDashboard() {
+    document.getElementById('userDisplayName').textContent = currentUser.name;
+    const achievements = { daily: 0, weekly: 0, monthly: 0 };
+    const totals = { daily: 0, weekly: 0, monthly: 0 };
     const kpiSettings = currentData.kpiSettings || {};
-    let weeklyAchieved = 0;
-    let weeklyTotal = 0;
 
-    const weekStart = getWeekStart(new Date());
-
-    CONFIG.targets.weekly.forEach(target => {
-        if (kpiSettings[target.id] !== false) {
-            const achievedThisWeek = getFilteredData(target.dataKey, ['approved'])
-                .filter(d => {
-                    if (!d) return false;
-                    const itemDate = new Date(d.timestamp);
-                    return itemDate >= weekStart;
-                }).length;
-            
-            weeklyAchieved += achievedThisWeek;
-            weeklyTotal += target.target;
-        }
+    ['daily', 'weekly', 'monthly'].forEach(period => {
+        CONFIG.targets[period].forEach(target => {
+            if (kpiSettings[target.id] !== false) {
+                const achieved = calculateAchievementForTarget(target, ['approved']);
+                achievements[period] += achieved;
+                totals[period] += target.target;
+            }
+        });
+        updateProgressBar(period, achievements[period], totals[period]);
     });
-
-    updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
+    updateTargetBreakdown();
 }
 
 function calculateAndDisplayPenalties() {
@@ -365,6 +301,30 @@ function calculatePenaltyForValidationStatus(validationFilter) {
     return totalPenalty;
 }
 
+function updateTargetBreakdown() {
+    const container = document.getElementById('targetBreakdown');
+    if (!container) return;
+    container.innerHTML = '';
+    const kpiSettings = currentData.kpiSettings || {};
+
+    ['daily', 'weekly', 'monthly'].forEach(period => {
+        const header = document.createElement('h4');
+        header.textContent = `Target ${period.charAt(0).toUpperCase() + period.slice(1)}`;
+        container.appendChild(header);
+        CONFIG.targets[period].forEach(target => {
+            if (kpiSettings[target.id] !== false) {
+                const achieved = calculateAchievementForTarget(target, ['approved']);
+                const status = achieved >= target.target ? 'completed' : 'pending';
+                container.innerHTML += `<div class="target-item"><div class="target-name">${target.name}</div><div class="target-progress"><span>${achieved}/${target.target}</span><span class="target-status ${status}">${status === 'completed' ? 'Selesai' : 'Pending'}</span></div></div>`;
+            }
+        });
+    });
+}
+
+/**
+ * [FUNGSI DIPERBARUI]
+ * Menghitung status validasi (case-insensitive).
+ */
 function updateValidationBreakdown() {
     const container = document.getElementById('validationBreakdown');
     if (!container) return;
@@ -498,130 +458,9 @@ function generateLeadRow(item, dataKey, mapping) {
         </tr>`;
 }
 
-
 // =================================================================================
-// FUNGSI LAPORAN RINCI (CAROUSEL) [MODIFIED]
+// FUNGSI MODAL & INTERAKSI
 // =================================================================================
-
-/**
- * [FUNGSI DIPERBARUI]
- * Merender tabel laporan rinci dengan format P/A/R sesuai permintaan.
- */
-function renderDetailedReport() {
-    const container = document.getElementById('detailedReportContainer');
-    const weekRangeDisplay = document.getElementById('weekRangeDisplay');
-    if (!container || !weekRangeDisplay) return;
-
-    const periodStartDate = getPeriodStartDate();
-    const periodEndDate = getPeriodEndDate();
-
-    const today = new Date();
-    const currentWeekStart = getWeekStart(today);
-    let displayWeekStart = new Date(currentWeekStart);
-    displayWeekStart.setDate(displayWeekStart.getDate() + (currentWeekOffset * 7));
-
-    document.getElementById('prevWeekBtn').disabled = displayWeekStart <= getWeekStart(periodStartDate);
-    
-    let nextWeekStart = new Date(displayWeekStart);
-    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
-    document.getElementById('nextWeekBtn').disabled = nextWeekStart > periodEndDate;
-
-    const weekDates = [];
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(displayWeekStart);
-        date.setDate(date.getDate() + i);
-        if (date <= periodEndDate) {
-            weekDates.push(date);
-        }
-    }
-
-    weekRangeDisplay.textContent = `${formatDate(weekDates[0])} - ${formatDate(weekDates[weekDates.length - 1])}`;
-
-    let tableHTML = '<table class="performance-table"><thead><tr><th>Target KPI</th>';
-    weekDates.forEach(date => {
-        tableHTML += `<th>${date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' })}</th>`;
-    });
-    tableHTML += '</tr></thead><tbody>';
-
-    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly];
-    allTargets.forEach(target => {
-        const targetName = `${target.name} (${target.target})`;
-        tableHTML += `<tr><td>${targetName}</td>`;
-
-        weekDates.forEach(date => {
-            const dataForDate = (currentData[target.dataKey] || [])
-                .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString());
-            
-            const approved = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'approved').length;
-            const pending = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'pending').length;
-            const rejected = dataForDate.filter(d => d.validationStatus && d.validationStatus.toLowerCase() === 'rejected').length;
-
-            if (dataForDate.length === 0) {
-                 tableHTML += `<td class="status-cell">-</td>`;
-            } else {
-                 tableHTML += `<td class="status-cell">
-                    <span class="pending">${pending}</span>
-                    <span class="divider">/</span>
-                    <span class="approved">${approved}</span>
-                    <span class="divider">/</span>
-                    <span class="rejected">${rejected}</span>
-                </td>`;
-            }
-        });
-        tableHTML += '</tr>';
-    });
-
-    tableHTML += '</tbody></table>';
-    container.innerHTML = tableHTML;
-}
-
-
-// =================================================================================
-// FUNGSI UTILITAS & INISIALISASI
-// =================================================================================
-
-function setupEventListeners() {
-    document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
-    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
-        e.preventDefault();
-        showContentPage(link.getAttribute('data-page'));
-    }));
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
-    
-    document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('#leadTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
-            button.classList.add('active');
-            document.getElementById(button.dataset.tab).classList.add('active');
-        });
-    });
-
-    document.getElementById('prevWeekBtn').addEventListener('click', () => {
-        currentWeekOffset--;
-        renderDetailedReport();
-    });
-    document.getElementById('nextWeekBtn').addEventListener('click', () => {
-        currentWeekOffset++;
-        renderDetailedReport();
-    });
-}
-
-function initializeApp() {
-    if (!currentUser) return;
-    document.body.setAttribute('data-role', currentUser.role);
-    updateDateTime();
-    setInterval(updateDateTime, 60000);
-    setupEventListeners();
-    setupFilters(() => {
-        currentWeekOffset = 0; 
-        loadInitialData();
-    });
-    loadInitialData();
-}
-
-document.addEventListener('DOMContentLoaded', initializeApp);
 
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
@@ -708,6 +547,10 @@ function openDetailModal(itemId, dataKey) {
     modal.classList.add('active');
 }
 
+// =================================================================================
+// FUNGSI UTILITAS & INISIALISASI
+// =================================================================================
+
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
@@ -722,3 +565,34 @@ function showContentPage(pageId) {
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     document.querySelector(`.nav-link[data-page="${pageId}"]`)?.classList.add('active');
 }
+
+function setupEventListeners() {
+    document.querySelectorAll('form.kpi-form').forEach(form => form.addEventListener('submit', handleFormSubmit));
+    document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showContentPage(link.getAttribute('data-page'));
+    }));
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
+    document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
+    
+    document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#leadTabContentContainer .tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
+}
+
+function initializeApp() {
+    if (!currentUser) return;
+    document.body.setAttribute('data-role', currentUser.role);
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+    setupEventListeners();
+    setupFilters(loadInitialData);
+    loadInitialData();
+}
+
+document.addEventListener('DOMContentLoaded', initializeApp);
