@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 8.0.0 - [FEAT] Menambahkan fitur revisi untuk data yang ditolak.
+ * @version 8.1.0 - [FIX] Memperbaiki tombol revisi yang salah memanggil modal.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -205,7 +205,6 @@ async function handleUpdateLead(e) {
     sendData('updateLeadStatus', payload, e);
 }
 
-// [NEW] Fungsi untuk menangani submit revisi
 async function handleRevisionSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -232,10 +231,9 @@ async function handleRevisionSubmit(e) {
         }
     }
 
-    // Tambahkan data yang tidak ada di form tapi dibutuhkan
     data.id = id;
     data.sales = currentUser.name;
-    data.timestamp = getLocalTimestampString(); // Update timestamp ke waktu revisi
+    data.timestamp = getLocalTimestampString();
     data.datestamp = getDatestamp();
 
     const payload = { sheetName, id, data };
@@ -624,6 +622,7 @@ function generateSimpleRow(item, dataKey) {
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
             <td>${mainValue}</td>
+            <td><span class="status status--${statusClass}">${validationStatus}</span></td>
             <td>${actionCell}</td>
         </tr>`;
 }
@@ -723,7 +722,6 @@ function openUpdateModal(leadId) {
     modal.classList.add('active');
 }
 
-// [NEW] Fungsi untuk membuka modal revisi
 function openRevisionModal(itemId, dataKey) {
     const allData = Object.values(currentData).flat();
     const item = allData.find(d => d && d.id === itemId);
@@ -743,12 +741,13 @@ function openRevisionModal(itemId, dataKey) {
     formContainer.dataset.sheetName = mapping.sheetName;
     formContainer.dataset.id = item.id;
 
-    // Ambil template form dari halaman input yang sesuai
-    const formTemplate = document.querySelector(`#${dataKey.toLowerCase()} .kpi-form, #input-lead .kpi-form`);
+    // [FIX] Mencari template form yang benar
+    const pageId = Object.keys(CONFIG.dataMapping).find(key => CONFIG.dataMapping[key].sheetName === mapping.sheetName && document.getElementById(key.toLowerCase()));
+    const formTemplate = pageId ? document.querySelector(`#${pageId.toLowerCase()} .kpi-form`) : document.querySelector(`#input-lead .kpi-form`);
+    
     if (formTemplate) {
         formContainer.innerHTML = formTemplate.innerHTML;
         
-        // Isi form dengan data yang ada
         for (const key in item) {
             const input = formContainer.querySelector(`[name="${key}"]`);
             if (input && input.type !== 'file') {
@@ -756,7 +755,6 @@ function openRevisionModal(itemId, dataKey) {
             }
         }
         
-        // Ganti teks tombol submit
         const submitButton = formContainer.querySelector('button[type="submit"]');
         if (submitButton) {
             submitButton.textContent = 'Kirim Ulang untuk Validasi';
