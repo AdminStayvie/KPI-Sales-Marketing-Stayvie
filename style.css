@@ -1259,7 +1259,6 @@ input:checked + .toggle-slider:before {
   border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity));
 }
 
-/* [NEW] Status Deal */
 .status--deal {
     background-color: rgba(var(--color-primary-rgb), var(--status-bg-opacity));
     color: var(--color-primary);
@@ -1408,4 +1407,25 @@ input:checked + .toggle-slider:before {
 
 [data-color-scheme="dark"] .monthly-total-cell {
     background-color: var(--color-charcoal-700);
+}
+
+/* [NEW] Validation Tabs */
+.validation-tabs .tab-button {
+    position: relative;
+}
+
+.validation-tabs .tab-button .pending-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: var(--color-error);
+    color: white;
+    font-size: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
 }
