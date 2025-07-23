@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.5.0 - [FEAT] Mengubah proses validasi agar tidak me-refresh halaman secara otomatis.
+ * @version 6.6.0 - [FIX] Memperbaiki bug tanggal libur dan mengintegrasikan status aktif KPI ke laporan.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -627,8 +627,9 @@ function setupTimeOffForm() {
         e.preventDefault();
         const date = document.getElementById('timeOffDate').value;
         const sales = salesSelect.value;
+        const description = document.getElementById('timeOffDescription').value;
         if (!date) { showMessage('Silakan pilih tanggal.', 'error'); return; }
-        const payload = { action: 'saveTimeOff', data: { date, sales, id: `timeoff_${Date.now()}` } };
+        const payload = { action: 'saveTimeOff', data: { date, sales, description, id: `timeoff_${Date.now()}` } };
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
         try {
@@ -652,8 +653,9 @@ function renderTimeOffList() {
     timeOffData.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
         if (!item || !item.date) return;
         const li = document.createElement('li');
-        const displayDate = new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
-        li.innerHTML = `<span>${displayDate} - <strong>${item.sales}</strong></span><button class="delete-btn" data-id="${item.id}">&times;</button>`;
+        // [FIX] Menggunakan UTC untuk mencegah pergeseran tanggal karena timezone
+        const displayDate = new Date(item.date + 'T00:00:00Z').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        li.innerHTML = `<span>${displayDate} - <strong>${item.sales}</strong> (${item.description || 'Tanpa keterangan'})</span><button class="delete-btn" data-id="${item.id}">&times;</button>`;
         container.appendChild(li);
     });
     container.querySelectorAll('.delete-btn').forEach(btn => {
