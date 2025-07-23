@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.8.0 - [FEAT] Melengkapi detail modal untuk data Deal.
+ * @version 7.9.0 - [FIX] Mengintegrasikan status aktif KPI ke laporan kinerja rinci.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -407,7 +407,6 @@ function renderPerformanceReport() {
     const dailyCounts = {};
     const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
     allTargets.forEach(target => {
-        // [FIX] Pengecekan KPI aktif ditambahkan di sini
         if (kpiSettings[target.id] === false) return;
         (currentData[target.dataKey] || []).forEach(item => {
             if (!item || !item.timestamp) return;
