@@ -103,7 +103,6 @@
                 </div>
                 <div class="card validation-summary-card" style="margin-bottom: var(--space-32);"><div class="card__body"><h3>Status Validasi Data Periode Ini</h3><div id="validationBreakdown"></div></div></div>
                 
-                <!-- [MODIFIED] Bagian Detail Target diubah menjadi Laporan Kinerja Rinci -->
                 <div class="card">
                     <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
                         <h3>Laporan Kinerja Rinci</h3>
@@ -180,6 +179,11 @@
                 <div class="form-group"><label class="form-label">Status Saat Ini</label><p id="modalCurrentStatus" class="status" style="font-weight: bold; padding-left: 0;"></p></div>
                 <div class="form-group"><label for="updateStatus" class="form-label">Ubah Status Menjadi</label><select id="updateStatus" name="status" class="form-control" required></select></div>
                 <div class="form-group"><label for="statusLog" class="form-label">Catatan Log Status</label><textarea id="statusLog" name="statusLog" class="form-control" rows="3" required></textarea></div>
+                <!-- [NEW] Kolom input file untuk bukti deal, tersembunyi secara default -->
+                <div id="proofOfDealContainer" class="form-group" style="display: none;">
+                    <label for="modalProofOfDeal" class="form-label">Bukti Deal (Invoice, Bukti Transfer, dll)</label>
+                    <input type="file" id="modalProofOfDeal" name="proofOfDeal" class="form-control" accept="image/*,.pdf">
+                </div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px;"><button type="button" class="btn btn--secondary" onclick="closeModal()">Batal</button><button type="submit" class="btn btn--primary">Simpan Perubahan</button></div>
             </form>
         </div>
