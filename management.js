@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk halaman dashboard manajemen.
- * @version 6.2.0 - Menambahkan modal detail di Pusat Validasi.
+ * @version 6.3.0 - [FEAT] Melengkapi detail modal untuk data Deal di Pusat Validasi.
  */
 
 const currentUserJSON = localStorage.getItem('currentUser');
@@ -11,14 +11,14 @@ if (currentUser.role !== 'management') { alert('Akses ditolak. Halaman ini hanya
 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
 
-// [NEW] CONFIG object untuk mapping data dan label detail
+// [MODIFIED] Melengkapi detailLabels untuk semua jenis Deal
 const CONFIG = {
     dataMapping: {
         'Leads': { dataKey: 'leads', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'Prospects': { dataKey: 'prospects', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
-        'B2BBookings': { dataKey: 'b2bBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'VenueBookings': { dataKey: 'venueBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
-        'Deal Lainnya': { dataKey: 'dealLainnya', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', product: 'Produk', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
+        'B2BBookings': { dataKey: 'b2bBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'VenueBookings': { dataKey: 'venueBookings', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
+        'Deal Lainnya': { dataKey: 'dealLainnya', detailLabels: { timestamp: 'Waktu Input', sales: 'Sales', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status' } },
         'Canvasing': { dataKey: 'canvasing', detailLabels: { datestamp: 'Waktu Upload', sales: 'Sales', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
         'Promosi': { dataKey: 'promosi', detailLabels: { datestamp: 'Waktu Upload', sales: 'Sales', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' }},
         'DoorToDoor': { dataKey: 'doorToDoor', detailLabels: { datestamp: 'Waktu Input', sales: 'Sales', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi' } },
@@ -59,7 +59,7 @@ const ALL_DATA_KEYS = Object.values(TARGET_CONFIG).flat().map(t => t.dataKey);
 let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
-let pendingEntries = {}; // [NEW] Cache for pending data
+let pendingEntries = {};
 
 // =================================================================================
 // FUNGSI PENGAMBILAN DATA
@@ -324,7 +324,7 @@ async function loadPendingEntries() {
         const response = await fetch(`${SCRIPT_URL}?action=getPendingEntries&t=${new Date().getTime()}`, { mode: 'cors' });
         const result = await response.json();
         if (result.status === 'success') {
-            pendingEntries = result.data; // Cache the data
+            pendingEntries = result.data;
             renderValidationCenter(pendingEntries);
         } else {
             throw new Error(result.message);
@@ -334,10 +334,6 @@ async function loadPendingEntries() {
     }
 }
 
-/**
- * [FUNGSI DIPERBARUI]
- * Menambahkan tombol "Detail".
- */
 function renderValidationCenter(data) {
     const container = document.getElementById('validationContainer');
     if (!container) return;
@@ -428,7 +424,7 @@ async function handleValidation(sheetName, id, type) {
 }
 
 // =================================================================================
-// FUNGSI MODAL [BARU]
+// FUNGSI MODAL
 // =================================================================================
 
 function closeDetailModal() {
@@ -481,7 +477,8 @@ function openDetailModal(itemId, sheetName) {
             }
             
             dd.textContent = value;
-            detailList.appendChild(dt); detailList.appendChild(dd);
+            detailList.appendChild(dt);
+            detailList.appendChild(dd);
         }
     }
     
