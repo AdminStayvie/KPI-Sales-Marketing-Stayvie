@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 8.1.0 - [FIX] Memperbaiki tombol revisi yang salah memanggil modal.
+ * @version 8.2.0 - [FIX] Memperbaiki logika tombol revisi dan mempertahankan timestamp asli.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -231,10 +231,12 @@ async function handleRevisionSubmit(e) {
         }
     }
 
+    // [FIX] Hapus timestamp dan datestamp agar tidak terkirim ke backend
+    delete data.timestamp;
+    delete data.datestamp;
+    
     data.id = id;
     data.sales = currentUser.name;
-    data.timestamp = getLocalTimestampString();
-    data.datestamp = getDatestamp();
 
     const payload = { sheetName, id, data };
     sendData('reviseData', payload, e);
@@ -608,12 +610,13 @@ function renderLeadTable(container, data, dataKey) {
     container.innerHTML = tableHTML;
 }
 
+// [FIX] Memperbaiki struktur kolom dan logika tombol revisi
 function generateSimpleRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
     const mainValue = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
     
-    let actionCell = `<span class="status status--${statusClass}">${validationStatus}</span>`;
+    let actionCell = '-';
     if (validationStatus.toLowerCase() === 'rejected') {
         actionCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
     }
@@ -633,7 +636,7 @@ function generateLeadRow(item, dataKey) {
     const validationStatusClass = validationStatus.toLowerCase();
     let actionButton = '-';
 
-    if (dataKey === 'leads' || dataKey === 'prospects') {
+    if ((dataKey === 'leads' || dataKey === 'prospects') && validationStatus.toLowerCase() !== 'rejected') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
     
@@ -657,9 +660,9 @@ function generateDealRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
     
-    let validationCell = `<span class="status status--${validationStatusClass}">${validationStatus}</span>`;
+    let actionCell = '-';
     if (validationStatus.toLowerCase() === 'rejected') {
-        validationCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
+        actionCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
     }
 
     return `
@@ -668,10 +671,11 @@ function generateDealRow(item, dataKey) {
             <td>${item.customerName || ''}</td>
             <td>${item.product || ''}</td>
             <td><span class="status status--deal">Deal</span></td>
-            <td>${validationCell}</td>
-            <td>-</td>
+            <td><span class="status status--${validationStatusClass}">${validationStatus}</span></td>
+            <td>${actionCell}</td>
         </tr>`;
 }
+
 
 // =================================================================================
 // FUNGSI MODAL & INTERAKSI
@@ -741,7 +745,6 @@ function openRevisionModal(itemId, dataKey) {
     formContainer.dataset.sheetName = mapping.sheetName;
     formContainer.dataset.id = item.id;
 
-    // [FIX] Mencari template form yang benar
     const pageId = Object.keys(CONFIG.dataMapping).find(key => CONFIG.dataMapping[key].sheetName === mapping.sheetName && document.getElementById(key.toLowerCase()));
     const formTemplate = pageId ? document.querySelector(`#${pageId.toLowerCase()} .kpi-form`) : document.querySelector(`#input-lead .kpi-form`);
     
