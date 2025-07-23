@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales.
- * @version 7.5.0 - [MODIFIED] Menambahkan visualisasi warna P/A/R, highlight hari ini, dan target bulanan pada tabel kinerja.
+ * @version 7.6.0 - [FIX] Memperbaiki bug tombol simpan yang tidak merespon dan modal detail pada tab Deal.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -371,7 +371,7 @@ function updateProgressBar(type, achieved, total) {
 }
 
 // =================================================================================
-// [MODIFIED] LAPORAN KINERJA RINCI
+// LAPORAN KINERJA RINCI & TABEL DATA
 // =================================================================================
 
 function renderPerformanceReport() {
@@ -481,10 +481,6 @@ function renderPerformanceReport() {
     document.getElementById('weekRangeLabel').textContent = startRange && endRange ? `${startRange} - ${endRange}` : '...';
 }
 
-// =================================================================================
-// FUNGSI TABEL & RINGKASAN DATA LAMA
-// =================================================================================
-
 function updateAllSummaries() {
     updateLeadTabs();
     Object.keys(CONFIG.dataMapping).forEach(dataKey => {
@@ -516,15 +512,31 @@ function updateLeadTabs() {
 
     const allLeads = currentData.leads || [];
     const allProspects = currentData.prospects || [];
-    const allDeals = [...(currentData.b2bBookings || []), ...(currentData.venueBookings || []), ...(currentData.dealLainnya || [])];
     
-    const dealIds = new Set(allDeals.map(d => d && d.id.replace('deal_', 'item_')));
     const leads = allLeads.filter(item => item && item.status === 'Lead');
-    const prospects = allProspects.filter(p => p && !dealIds.has(p.id.replace('prospect_', 'item_')));
+    const prospects = allProspects;
 
     renderLeadTable(leadContainer, leads, 'leads');
     renderLeadTable(prospectContainer, prospects, 'prospects');
-    renderLeadTable(dealContainer, allDeals, 'deals');
+    
+    const allDeals = [
+        ...(currentData.b2bBookings || []).map(d => ({...d, originalDataKey: 'b2bBookings'})),
+        ...(currentData.venueBookings || []).map(d => ({...d, originalDataKey: 'venueBookings'})),
+        ...(currentData.dealLainnya || []).map(d => ({...d, originalDataKey: 'dealLainnya'}))
+    ];
+    
+    if (allDeals.length === 0) {
+        dealContainer.innerHTML = `<div class="empty-state">Belum ada data Deal untuk periode ini</div>`;
+        return;
+    }
+
+    allDeals.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const mapping = CONFIG.dataMapping['leads'];
+    const headers = mapping.headers;
+    const tableHTML = `<table><thead><tr><th>${headers.join('</th><th>')}</th></tr></thead><tbody>
+        ${allDeals.map(item => item ? generateDealRow(item, item.originalDataKey) : '').join('')}
+    </tbody></table>`;
+    dealContainer.innerHTML = tableHTML;
 }
 
 function renderLeadTable(container, data, dataKey) {
@@ -532,7 +544,7 @@ function renderLeadTable(container, data, dataKey) {
         container.innerHTML = `<div class="empty-state">Belum ada data ${dataKey} untuk periode ini</div>`;
         return;
     }
-    const mapping = CONFIG.dataMapping[dataKey] || CONFIG.dataMapping['leads'];
+    const mapping = CONFIG.dataMapping[dataKey];
     if (!mapping) {
         container.innerHTML = `<div class="empty-state">Konfigurasi tabel tidak ditemukan.</div>`;
         return;
@@ -543,7 +555,7 @@ function renderLeadTable(container, data, dataKey) {
     container.innerHTML = tableHTML;
 }
 
-function generateSimpleRow(item, dataKey, mapping) {
+function generateSimpleRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
     const mainValue = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
@@ -555,7 +567,7 @@ function generateSimpleRow(item, dataKey, mapping) {
         </tr>`;
 }
 
-function generateLeadRow(item, dataKey, mapping) {
+function generateLeadRow(item, dataKey) {
     const statusClass = (item.status || '').toLowerCase().replace(/\s+/g, '-');
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
@@ -573,6 +585,21 @@ function generateLeadRow(item, dataKey, mapping) {
             <td><span class="status status--${statusClass}">${item.status || 'N/A'}</span></td>
             <td><span class="status status--${validationStatusClass}">${validationStatus}</span></td>
             <td>${actionButton}</td>
+        </tr>`;
+}
+
+function generateDealRow(item, dataKey) {
+    const validationStatus = item.validationStatus || 'Pending';
+    const validationStatusClass = validationStatus.toLowerCase();
+    
+    return `
+        <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
+            <td>${item.datestamp || ''}</td>
+            <td>${item.customerName || ''}</td>
+            <td>${item.product || ''}</td>
+            <td><span class="status status--deal">Deal</span></td>
+            <td><span class="status status--${validationStatusClass}">${validationStatus}</span></td>
+            <td>-</td>
         </tr>`;
 }
 
@@ -622,6 +649,7 @@ function openDetailModal(itemId, dataKey) {
 
     if (!item || !mapping) {
         console.error("Data atau mapping tidak ditemukan:", itemId, dataKey);
+        showMessage("Tidak dapat menampilkan detail data.", "error");
         return;
     }
 
@@ -668,6 +696,13 @@ function openDetailModal(itemId, dataKey) {
 // =================================================================================
 // FUNGSI UTILITAS & INISIALISASI
 // =================================================================================
+
+const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = error => reject(error);
+});
 
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true; // Minggu selalu libur
