@@ -628,7 +628,10 @@ function setupTimeOffForm() {
         const date = document.getElementById('timeOffDate').value;
         const sales = salesSelect.value;
         const description = document.getElementById('timeOffDescription').value;
-        if (!date) { showMessage('Silakan pilih tanggal.', 'error'); return; }
+        if (!date || !description) { 
+            showMessage('Tanggal dan Keterangan wajib diisi.', 'error'); 
+            return; 
+        }
         const payload = { action: 'saveTimeOff', data: { date, sales, description, id: `timeoff_${Date.now()}` } };
         const submitButton = form.querySelector('button[type="submit"]');
         submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
@@ -653,7 +656,6 @@ function renderTimeOffList() {
     timeOffData.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
         if (!item || !item.date) return;
         const li = document.createElement('li');
-        // [FIX] Menggunakan UTC untuk mencegah pergeseran tanggal karena timezone
         const displayDate = new Date(item.date + 'T00:00:00Z').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
         li.innerHTML = `<span>${displayDate} - <strong>${item.sales}</strong> (${item.description || 'Tanpa keterangan'})</span><button class="delete-btn" data-id="${item.id}">&times;</button>`;
         container.appendChild(li);
