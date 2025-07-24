@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.9 - Reverted to efficient server-side filtering and fixed B2B product matching.
+ * @version 9.0.10 - Updates timestamp and datestamp upon status conversion (Lead -> Prospect, etc.).
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -264,6 +264,7 @@ async function handleUpdateLead(e) {
         const sourceCollectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
         const originalDocRef = db.collection(sourceCollectionName).doc(leadId);
         
+        // --- SCENARIO 1: Lead becomes a Prospect ---
         if (sourceCollectionName === 'Leads' && newStatus === 'Prospect') {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen Lead asli tidak ditemukan di database.");
@@ -271,6 +272,9 @@ async function handleUpdateLead(e) {
             const newData = { ...originalDoc.data() };
             newData.status = 'Prospect';
             newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Prospect. Catatan: ${notes}`;
+            // [FIXED] Update timestamp and datestamp to current time for the new prospect
+            newData.timestamp = new Date().toISOString();
+            newData.datestamp = getDatestamp();
             
             await db.collection('Prospects').add(newData);
 
@@ -279,6 +283,7 @@ async function handleUpdateLead(e) {
                 statusLog: newData.statusLog
             });
 
+        // --- SCENARIO 2: Lead or Prospect becomes a Deal ---
         } else if (newStatus === 'Deal') {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
@@ -288,6 +293,9 @@ async function handleUpdateLead(e) {
             const newData = { ...originalDoc.data() };
             newData.status = 'Deal';
             newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Deal. Catatan: ${notes}`;
+            // [FIXED] Update timestamp and datestamp to current time for the new deal
+            newData.timestamp = new Date().toISOString();
+            newData.datestamp = getDatestamp();
             
             const proofInput = form.querySelector('#modalProofOfDeal');
             if (proofInput && proofInput.files.length > 0) {
@@ -303,6 +311,7 @@ async function handleUpdateLead(e) {
                 statusLog: newData.statusLog
             });
 
+        // --- SCENARIO 3: Any other status update (e.g., to "Lost") ---
         } else {
             const updatedLog = (leadData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi ${newStatus}. Catatan: ${notes}`;
             await originalDocRef.update({
