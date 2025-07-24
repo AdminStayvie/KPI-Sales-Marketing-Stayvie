@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.7 - Added CSV data export functionality.
+ * @version 7.0.8 - Implemented weekly carousel for detailed performance report.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -12,7 +12,7 @@ auth.onAuthStateChanged(user => {
         if (userJSON) {
             const parsedUser = JSON.parse(userJSON);
             if (parsedUser.role !== 'management') {
-                auth.signOut(); // Langsung logout jika role tidak sesuai
+                auth.signOut();
                 return;
             }
             currentUser = parsedUser;
@@ -84,6 +84,8 @@ let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
 let pendingEntries = {};
+// [BARU] Variabel untuk carousel
+let managementReportWeekOffset = 0;
 
 // =================================================================================
 // FUNGSI PENGAMBILAN DATA (VERSI FIREBASE)
@@ -265,14 +267,9 @@ async function handleValidation(buttonElement, sheetName, id, type) {
 
 
 // =================================================================================
-// FUNGSI EKSPOR DATA [BARU]
+// FUNGSI EKSPOR DATA
 // =================================================================================
 
-/**
- * Mengubah array objek menjadi string CSV.
- * @param {Array<Object>} dataArray Array data yang akan diubah.
- * @returns {string} String dalam format CSV.
- */
 function convertToCsv(dataArray) {
     if (!dataArray || dataArray.length === 0) {
         return "";
@@ -281,10 +278,8 @@ function convertToCsv(dataArray) {
     const headers = Object.keys(dataArray[0]);
     const csvRows = [];
     
-    // Tambahkan baris header
     csvRows.push(headers.join(','));
 
-    // Tambahkan baris data
     for (const row of dataArray) {
         const values = headers.map(header => {
             let cell = row[header] === null || row[header] === undefined ? '' : row[header];
@@ -295,7 +290,6 @@ function convertToCsv(dataArray) {
                 cell = String(cell);
             }
 
-            // Escape double quotes and handle commas
             if (cell.includes('"') || cell.includes(',')) {
                 cell = `"${cell.replace(/"/g, '""')}"`;
             }
@@ -307,9 +301,6 @@ function convertToCsv(dataArray) {
     return csvRows.join('\n');
 }
 
-/**
- * Mengekspor semua data yang ditampilkan sebagai file ZIP berisi CSV.
- */
 async function exportAllDataAsZip() {
     showMessage('Mempersiapkan file unduhan...', 'info');
     const exportBtn = document.getElementById('exportDataBtn');
@@ -559,29 +550,53 @@ function isDayOff(date, salesName) {
     return timeOffData.some(off => off && off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
 }
 
+// [REVISI] Fungsi ini sekarang menggunakan carousel mingguan
 function renderTabbedTargetSummary() {
     const tabsContainer = document.getElementById('tabsContainer');
     const contentContainer = document.getElementById('tabContentContainer');
     if (!tabsContainer || !contentContainer) return;
-    tabsContainer.innerHTML = '';
-    contentContainer.innerHTML = '';
+
     const periodDates = getDatesForPeriod();
-    const periodStartDate = getPeriodStartDate();
-    const periodEndDate = getPeriodEndDate();
+    if (periodDates.length === 0) {
+        contentContainer.innerHTML = '<div class="empty-state">Pilih periode untuk melihat laporan.</div>';
+        return;
+    }
+    const weekDates = periodDates.slice(managementReportWeekOffset * 7, (managementReportWeekOffset * 7) + 7);
     const kpiSettings = allData.kpiSettings || {};
 
-    allSalesUsers.forEach((salesName, index) => {
+    // Buat ulang tabs hanya jika belum ada
+    if (tabsContainer.children.length === 0) {
+        allSalesUsers.forEach((salesName, index) => {
+            const contentId = `content-${salesName.replace(/\s+/g, '')}`;
+            tabsContainer.innerHTML += `<button class="tab-button ${index === 0 ? 'active' : ''}" data-tab="${contentId}">${salesName}</button>`;
+            contentContainer.innerHTML += `<div id="${contentId}" class="tab-content ${index === 0 ? 'active' : ''}"><div class="performance-table-wrapper"><table class="performance-table"></table></div></div>`;
+        });
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                button.classList.add('active');
+                document.getElementById(button.dataset.tab).classList.add('active');
+            });
+        });
+    }
+
+    // Update konten tabel untuk setiap sales
+    allSalesUsers.forEach(salesName => {
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
-        tabsContainer.innerHTML += `<button class="tab-button ${index === 0 ? 'active' : ''}" data-tab="${contentId}">${salesName}</button>`;
+        const tableContainer = document.querySelector(`#${contentId} .performance-table`);
+        if (!tableContainer) return;
+
         let tableHeader = '<thead><tr><th>Target</th>';
-        periodDates.forEach(date => { tableHeader += `<th>${date.getDate()}</th>`; });
+        weekDates.forEach(date => { tableHeader += `<th>${date.getDate()}</th>`; });
         tableHeader += '</tr></thead>';
+        
         let tableBody = '<tbody>';
         ['daily', 'weekly', 'monthly'].forEach(period => {
             TARGET_CONFIG[period].forEach(target => {
                 if (kpiSettings[target.id] === false) return;
                 tableBody += `<tr><td>${target.name} (${period.charAt(0)})</td>`;
-                periodDates.forEach(date => {
+                weekDates.forEach(date => {
                     let cellContent = '';
                     let cellClass = '';
                     if (period === 'daily') {
@@ -595,8 +610,8 @@ function renderTabbedTargetSummary() {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'monthly' && date.getDate() === periodEndDate.getDate()) {
-                        const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
+                    } else if (period === 'monthly' && date.getDate() === getPeriodEndDate().getDate()) {
+                        const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).length;
                         cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
                     tableBody += `<td class="${cellClass}">${cellContent}</td>`;
@@ -605,17 +620,18 @@ function renderTabbedTargetSummary() {
             });
         });
         tableBody += '</tbody>';
-        contentContainer.innerHTML += `<div id="${contentId}" class="tab-content ${index === 0 ? 'active' : ''}"><div class="performance-table-wrapper"><table class="performance-table">${tableHeader}${tableBody}</table></div></div>`;
+        tableContainer.innerHTML = tableHeader + tableBody;
     });
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            button.classList.add('active');
-            document.getElementById(button.dataset.tab).classList.add('active');
-        });
-    });
+
+    // Update navigasi carousel
+    document.getElementById('managementPrevWeekBtn').disabled = (managementReportWeekOffset === 0);
+    const totalWeeks = Math.ceil(periodDates.length / 7);
+    document.getElementById('managementNextWeekBtn').disabled = (managementReportWeekOffset >= totalWeeks - 1);
+    const startRange = weekDates[0] ? weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
+    const endRange = weekDates.length > 0 ? weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
+    document.getElementById('managementWeekRangeLabel').textContent = startRange && endRange ? `${startRange} - ${endRange}` : '...';
 }
+
 
 function updateTeamValidationBreakdown() {
     const container = document.getElementById('teamValidationBreakdown');
@@ -866,7 +882,6 @@ function initializeApp() {
         auth.signOut();
     });
     document.getElementById('refreshValidationBtn')?.addEventListener('click', loadPendingEntries);
-    // [TAMBAHAN] Event listener untuk tombol ekspor
     document.getElementById('exportDataBtn')?.addEventListener('click', exportAllDataAsZip);
     updateDateTime();
     setInterval(updateDateTime, 60000);
@@ -877,7 +892,25 @@ function initializeApp() {
         });
     });
     setupFilters(() => {
+        managementReportWeekOffset = 0; // Reset offset saat filter berubah
         loadInitialData(false);
     });
     loadInitialData(true);
+
+    // [BARU] Event listener untuk carousel
+    document.getElementById('managementPrevWeekBtn').addEventListener('click', () => {
+        if (managementReportWeekOffset > 0) {
+            managementReportWeekOffset--;
+            renderTabbedTargetSummary();
+        }
+    });
+
+    document.getElementById('managementNextWeekBtn').addEventListener('click', () => {
+        const periodDates = getDatesForPeriod();
+        const totalWeeks = Math.ceil(periodDates.length / 7);
+        if (managementReportWeekOffset < totalWeeks - 1) {
+            managementReportWeekOffset++;
+            renderTabbedTargetSummary();
+        }
+    });
 }
