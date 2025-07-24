@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.3 - Fixed data fetching and improved error handling.
+ * @version 7.0.4 - Implemented transactional updates for validation to prevent race conditions.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -109,9 +109,6 @@ async function loadInitialData(isInitialLoad = false) {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [FIXED] Query ini mengambil semua data dalam rentang waktu.
-        // INI MEMBUTUHKAN INDEX di Firestore untuk field 'timestamp'.
-        // Jika error, Firebase akan memberikan link untuk membuatnya di console.
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName)
               .where('timestamp', '>=', periodStartDate.toISOString())
@@ -128,7 +125,6 @@ async function loadInitialData(isInitialLoad = false) {
         const allPromises = [...fetchPromises, ...settingsPromises];
         const results = await Promise.all(allPromises);
 
-        // Memproses data KPI
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const collectionName = collectionsToFetch[index];
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -138,7 +134,6 @@ async function loadInitialData(isInitialLoad = false) {
             }
         });
         
-        // Proses data pengaturan dan user
         const kpiSettingsDoc = results[results.length - 3];
         allData.kpiSettings = kpiSettingsDoc.exists ? kpiSettingsDoc.data() : {};
 
@@ -185,8 +180,6 @@ async function loadPendingEntries() {
         pendingEntries = {}; // Reset
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [FIXED] Query ini membutuhkan indeks untuk 'validationStatus' di setiap koleksi.
-        // Firebase akan otomatis menyarankan pembuatannya jika belum ada.
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName).where('validationStatus', '==', 'Pending').get()
         );
@@ -214,11 +207,7 @@ async function loadPendingEntries() {
     }
 }
 
-// ... Sisa file (fungsi UI, event listener, dll.) sebagian besar tetap sama ...
-// Cukup salin sisa fungsi dari file management.js asli Anda di sini.
-// Pastikan semua fungsi yang bergantung pada `allData` dan `allSalesUsers`
-// menangani kasus di mana data tersebut mungkin kosong karena kegagalan pengambilan.
-
+// [FIXED] Using a transaction for validation to prevent race conditions.
 async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
     if (type === 'reject') {
@@ -233,27 +222,45 @@ async function handleValidation(buttonElement, sheetName, id, type) {
     actionCell.querySelectorAll('button').forEach(btn => btn.disabled = true);
     showMessage('Memproses validasi...', 'info');
 
+    const docRef = db.collection(sheetName).doc(id);
+
     try {
-        await db.collection(sheetName).doc(id).update({
-            validationStatus: type === 'approve' ? 'Approved' : 'Rejected',
-            validationNotes: notes
+        await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(docRef);
+            if (!doc.exists) {
+                // This specific error message will be shown to the user.
+                throw new Error("Dokumen tidak ditemukan. Mungkin sudah divalidasi atau dihapus oleh manajer lain.");
+            }
+
+            // If the document exists, proceed with the update.
+            transaction.update(docRef, {
+                validationStatus: type === 'approve' ? 'Approved' : 'Rejected',
+                validationNotes: notes
+            });
         });
 
         showMessage('Validasi berhasil disimpan.', 'success');
-        // Hapus baris dari UI setelah berhasil
+        
+        // Animate and remove the row from the UI.
         const row = actionCell.parentElement;
+        row.style.transition = 'opacity 0.5s ease';
         row.style.opacity = '0';
         setTimeout(() => {
             row.remove();
-            // Muat ulang data utama di background untuk update statistik
-            loadInitialData();
+            // Re-fetch pending entries to update counts and the list.
+            loadPendingEntries(); 
+            // Re-fetch main data in the background to update stats on the main dashboard.
+            loadInitialData(); 
         }, 500);
 
     } catch (error) {
+        // Display the specific error message from the transaction or a generic one.
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
+        console.error("Validation failed:", error);
         actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
     }
 }
+
 
 // =================================================================================
 // PENGATURAN (VERSI FIREBASE)
@@ -299,13 +306,11 @@ async function handleTimeOffSubmit(e) {
     submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
 
     try {
-        // Coba update dulu, jika gagal (dokumen tidak ada), baru set
         const docRef = db.collection('settings').doc('timeOff');
         await docRef.update({
             entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
         });
         showMessage('Data libur berhasil disimpan.', 'success');
-        // Muat ulang data setelah submit berhasil
         await loadInitialData(); 
         form.reset();
     } catch (error) {
@@ -348,7 +353,6 @@ async function handleDeleteTimeOff(id) {
 
 function updateAllUI() {
     if (!allData.kpiSettings || allSalesUsers.length === 0) {
-        // Jika data penting belum ada, jangan update UI
         return;
     }
     try {
@@ -493,7 +497,7 @@ function renderTabbedTargetSummary() {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'monthly' && date.getDate() === periodEndDate.getDate()) { // Show on last day of period
+                    } else if (period === 'monthly' && date.getDate() === periodEndDate.getDate()) {
                         const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
                         cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
@@ -586,7 +590,6 @@ function renderValidationTabs(data) {
     let isFirstTab = true;
     for (const salesName in pendingBySales) {
         const salesData = pendingBySales[salesName];
-        const tabId = `validation-tab-${salesName.replace(/\s+/g, '')}`;
         const contentId = `validation-content-${salesName.replace(/\s+/g, '')}`;
 
         const tabButton = document.createElement('button');
@@ -725,7 +728,6 @@ function setupTimeOffForm() {
     allSalesUsers.forEach(name => {
         salesSelect.innerHTML += `<option value="${name}">${name}</option>`;
     });
-    // Hapus event listener lama sebelum menambahkan yang baru untuk mencegah duplikasi
     form.removeEventListener('submit', handleTimeOffSubmit);
     form.addEventListener('submit', handleTimeOffSubmit);
 }
@@ -775,7 +777,7 @@ function initializeApp() {
         });
     });
     setupFilters(() => {
-        loadInitialData(false); // false karena bukan load awal
+        loadInitialData(false);
     });
-    loadInitialData(true); // true karena ini load awal
+    loadInitialData(true);
 }
