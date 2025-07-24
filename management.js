@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.5 - Implemented pre-check on validation transaction to prevent errors and improve UI feedback.
+ * @version 7.0.6 - Reverted to client-side date filtering to resolve unresponsiveness and data loading issues.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -108,11 +108,10 @@ async function loadInitialData(isInitialLoad = false) {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
+        // [FIXED] Reverted to fetching all documents and filtering client-side.
+        // This is more robust against missing indexes or inconsistent date fields.
         const fetchPromises = collectionsToFetch.map(collectionName => 
-            db.collection(collectionName)
-              .where('timestamp', '>=', periodStartDate.toISOString())
-              .where('timestamp', '<=', periodEndDate.toISOString())
-              .get()
+            db.collection(collectionName).get()
         );
 
         const settingsPromises = [
@@ -126,10 +125,23 @@ async function loadInitialData(isInitialLoad = false) {
 
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const collectionName = collectionsToFetch[index];
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // Perform date filtering on the client side.
+            const filteredData = allDocs.filter(item => {
+                // Use 'timestamp' as the primary date field. Fallback can be added here if needed.
+                if (!item.timestamp) return false; 
+                try {
+                    const itemDate = new Date(item.timestamp);
+                    return !isNaN(itemDate) && itemDate >= periodStartDate && itemDate <= periodEndDate;
+                } catch (e) {
+                    return false;
+                }
+            });
+
             const mapping = CONFIG.dataMapping[collectionName];
             if(mapping && mapping.dataKey && allData[mapping.dataKey]) {
-                allData[mapping.dataKey] = data;
+                allData[mapping.dataKey] = filteredData;
             }
         });
         
@@ -151,9 +163,6 @@ async function loadInitialData(isInitialLoad = false) {
 
     } catch (error) {
         let errorMessage = `Gagal memuat data awal: ${error.message}`;
-        if (error.code === 'failed-precondition') {
-            errorMessage = 'Gagal memuat data. Diperlukan indeks database. Silakan buka Console (F12), cari error, dan klik link untuk membuat indeks di Firebase.';
-        }
         if (isInitialLoad) showMessage(errorMessage, 'error');
         console.error("Fetch Error:", error);
     } finally {
@@ -247,22 +256,18 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         showMessage('Validasi berhasil disimpan.', 'success');
         
         // --- UI Update Logic ---
-        // Animate and remove the row from the UI.
         const row = actionCell.parentElement;
         row.style.transition = 'opacity 0.5s ease';
         row.style.opacity = '0';
         setTimeout(() => {
             row.remove();
-            // Re-fetch pending entries to update counts and the list.
             loadPendingEntries(); 
-            // Re-fetch main data in the background to update stats on the main dashboard.
             loadInitialData(); 
         }, 500);
 
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
         console.error("Validation failed:", error);
-        // Re-enable buttons only on failure.
         actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
     }
 }
@@ -358,7 +363,7 @@ async function handleDeleteTimeOff(id) {
 // =================================================================================
 
 function updateAllUI() {
-    if (!allData.kpiSettings || allSalesUsers.length === 0) {
+    if (!allData.kpiSettings || !allSalesUsers || allSalesUsers.length === 0) {
         return;
     }
     try {
@@ -785,4 +790,6 @@ function initializeApp() {
     setupFilters(() => {
         loadInitialData(false);
     });
-    loadInitialData(true)
+    loadInitialData(true);
+}
+```" in the immersive edit
