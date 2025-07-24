@@ -207,7 +207,6 @@
         </div>
     </div>
 
-
     <!-- Modal baru untuk menampilkan detail generik -->
     <div id="detailModal" class="modal-overlay">
         <div class="modal-content">
@@ -215,6 +214,42 @@
             <div id="detailModalBody"></div>
         </div>
     </div>
+
+    <!-- ====================================================== -->
+    <!--          SKRIP FIREBASE - MULAI DARI SINI            -->
+    <!-- ====================================================== -->
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <!-- Skrip Inisialisasi Firebase -->
+    <script>
+      // !!! PENTING: GANTI DENGAN KONFIGURASI FIREBASE ANDA SENDIRI !!!
+      const firebaseConfig = {
+  apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
+  authDomain: "admin-stayvie.firebaseapp.com",
+  projectId: "admin-stayvie",
+  storageBucket: "admin-stayvie.firebasestorage.app",
+  messagingSenderId: "263821398757",
+  appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
+};
+
+      // Inisialisasi Firebase
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const db = firebase.firestore(); // Inisialisasi Firestore
+      const auth = firebase.auth();     // Inisialisasi Firebase Auth
+      const storage = firebase.storage(); // Inisialisasi Firebase Storage
+    </script>
+
+    <!-- ====================================================== -->
+    <!--           SKRIP FIREBASE - SELESAI DI SINI             -->
+    <!-- ====================================================== -->
+
 
     <script src="utils.js"></script>
     <script src="app.js"></script>
