@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.2 - Bug Fix for Data Loading
+ * @version 7.0.3 - Fixed data fetching and improved error handling.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -12,8 +12,7 @@ auth.onAuthStateChanged(user => {
         if (userJSON) {
             const parsedUser = JSON.parse(userJSON);
             if (parsedUser.role !== 'management') {
-                alert('Akses ditolak.');
-                window.location.href = 'dashboard.html';
+                auth.signOut(); // Langsung logout jika role tidak sesuai
                 return;
             }
             currentUser = parsedUser;
@@ -25,7 +24,6 @@ auth.onAuthStateChanged(user => {
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     initializeApp();
                 } else {
-                    alert('Akses ditolak.');
                     auth.signOut();
                 }
             }).catch(() => auth.signOut());
@@ -58,7 +56,6 @@ const CONFIG = {
     }
 };
 
-// [FIXED] Konfigurasi target KPI dibuat lengkap
 const TARGET_CONFIG = {
     daily: [
         { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads' },
@@ -96,15 +93,25 @@ async function loadInitialData(isInitialLoad = false) {
     if (isFetching) return;
     isFetching = true;
     if (isInitialLoad) showMessage("Memuat data tim dari server...", "info");
+    document.body.style.cursor = 'wait';
     
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
 
-    allData = {}; // Reset data
+    // Inisialisasi struktur data
+    allData = {};
+    Object.values(CONFIG.dataMapping).forEach(mapping => {
+        if (mapping.dataKey) {
+            allData[mapping.dataKey] = [];
+        }
+    });
 
     try {
-        // [FIXED] Mengambil nama koleksi dari keys CONFIG.dataMapping
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
+        
+        // [FIXED] Query ini mengambil semua data dalam rentang waktu.
+        // INI MEMBUTUHKAN INDEX di Firestore untuk field 'timestamp'.
+        // Jika error, Firebase akan memberikan link untuk membuatnya di console.
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName)
               .where('timestamp', '>=', periodStartDate.toISOString())
@@ -121,12 +128,12 @@ async function loadInitialData(isInitialLoad = false) {
         const allPromises = [...fetchPromises, ...settingsPromises];
         const results = await Promise.all(allPromises);
 
-        // [FIXED] Memproses data KPI dengan logika yang benar
+        // Memproses data KPI
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const collectionName = collectionsToFetch[index];
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const mapping = CONFIG.dataMapping[collectionName];
-            if(mapping && mapping.dataKey) {
+            if(mapping && mapping.dataKey && allData[mapping.dataKey]) {
                 allData[mapping.dataKey] = data;
             }
         });
@@ -149,10 +156,15 @@ async function loadInitialData(isInitialLoad = false) {
         if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
 
     } catch (error) {
-        if (isInitialLoad) showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        let errorMessage = `Gagal memuat data awal: ${error.message}`;
+        if (error.code === 'failed-precondition') {
+            errorMessage = 'Gagal memuat data. Diperlukan indeks database. Silakan buka Console (F12), cari error, dan klik link untuk membuat indeks di Firebase.';
+        }
+        if (isInitialLoad) showMessage(errorMessage, 'error');
         console.error("Fetch Error:", error);
     } finally {
         isFetching = false;
+        document.body.style.cursor = 'default';
     }
 }
 
@@ -165,13 +177,16 @@ async function loadPendingEntries() {
     const contentContainer = document.getElementById('validationTabContentContainer');
     if (!tabsContainer || !contentContainer) return;
     
-    tabsContainer.innerHTML = '<p>Memuat data...</p>';
+    tabsContainer.innerHTML = '<p>Memuat data validasi...</p>';
     contentContainer.innerHTML = '';
+    document.body.style.cursor = 'wait';
 
     try {
         pendingEntries = {}; // Reset
-        // [FIXED] Mengambil nama koleksi dari keys CONFIG.dataMapping
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
+        
+        // [FIXED] Query ini membutuhkan indeks untuk 'validationStatus' di setiap koleksi.
+        // Firebase akan otomatis menyarankan pembuatannya jika belum ada.
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName).where('validationStatus', '==', 'Pending').get()
         );
@@ -188,9 +203,21 @@ async function loadPendingEntries() {
         renderValidationTabs(pendingEntries);
 
     } catch (error) {
-        tabsContainer.innerHTML = `<p class="message error">Gagal memuat data: ${error.message}</p>`;
+        let errorMessage = `Gagal memuat data validasi: ${error.message}`;
+        if (error.code === 'failed-precondition') {
+            errorMessage = 'Gagal memuat data. Diperlukan indeks database untuk validasi. Buka Console (F12) untuk melihat link pembuatan indeks.';
+        }
+        tabsContainer.innerHTML = `<p class="message error">${errorMessage}</p>`;
+        console.error("Validation Load Error:", error);
+    } finally {
+        document.body.style.cursor = 'default';
     }
 }
+
+// ... Sisa file (fungsi UI, event listener, dll.) sebagian besar tetap sama ...
+// Cukup salin sisa fungsi dari file management.js asli Anda di sini.
+// Pastikan semua fungsi yang bergantung pada `allData` dan `allSalesUsers`
+// menangani kasus di mana data tersebut mungkin kosong karena kegagalan pengambilan.
 
 async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
@@ -216,7 +243,11 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         // Hapus baris dari UI setelah berhasil
         const row = actionCell.parentElement;
         row.style.opacity = '0';
-        setTimeout(() => row.remove(), 500);
+        setTimeout(() => {
+            row.remove();
+            // Muat ulang data utama di background untuk update statistik
+            loadInitialData();
+        }, 500);
 
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
@@ -268,18 +299,20 @@ async function handleTimeOffSubmit(e) {
     submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
 
     try {
-        await db.collection('settings').doc('timeOff').update({
+        // Coba update dulu, jika gagal (dokumen tidak ada), baru set
+        const docRef = db.collection('settings').doc('timeOff');
+        await docRef.update({
             entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
         });
         showMessage('Data libur berhasil disimpan.', 'success');
-        loadInitialData(); 
+        // Muat ulang data setelah submit berhasil
+        await loadInitialData(); 
         form.reset();
     } catch (error) {
-        // Jika dokumen belum ada, buat baru
         if (error.code === 'not-found') {
             await db.collection('settings').doc('timeOff').set({ entries: [newEntry] });
             showMessage('Data libur berhasil disimpan.', 'success');
-            loadInitialData(); 
+            await loadInitialData();
             form.reset();
         } else {
             showMessage(`Error: ${error.message}`, 'error');
@@ -303,17 +336,21 @@ async function handleDeleteTimeOff(id) {
             entries: firebase.firestore.FieldValue.arrayRemove(entryToDelete)
         });
         showMessage('Data berhasil dihapus.', 'success');
-        loadInitialData();
+        await loadInitialData();
     } catch (error) {
         showMessage(`Error menghapus data: ${error.message}`, 'error');
     }
 }
 
 // =================================================================================
-// SEMUA FUNGSI UI LAINNYA (TETAP SAMA SEPERTI ASLINYA)
+// SEMUA FUNGSI UI LAINNYA
 // =================================================================================
 
 function updateAllUI() {
+    if (!allData.kpiSettings || allSalesUsers.length === 0) {
+        // Jika data penting belum ada, jangan update UI
+        return;
+    }
     try {
         const penalties = calculatePenalties();
         updateStatCards(penalties);
@@ -330,10 +367,11 @@ function updateAllUI() {
 function getFilteredData(salesName, dataKey, validationFilter = ['Approved']) {
     const data = allData[dataKey] || [];
     if (!Array.isArray(data)) return [];
+    const lowerCaseFilter = validationFilter.map(f => f.toLowerCase());
     return data.filter(item => 
         item &&
         item.sales === salesName && 
-        (validationFilter.includes('All') || (item.validationStatus && validationFilter.map(f=>f.toLowerCase()).includes(item.validationStatus.toLowerCase())))
+        (validationFilter.includes('All') || (item.validationStatus && lowerCaseFilter.includes(item.validationStatus.toLowerCase())))
     );
 }
 
@@ -433,10 +471,10 @@ function renderTabbedTargetSummary() {
     allSalesUsers.forEach((salesName, index) => {
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
         tabsContainer.innerHTML += `<button class="tab-button ${index === 0 ? 'active' : ''}" data-tab="${contentId}">${salesName}</button>`;
-        let tableHeader = '<tr><th>Target</th>';
+        let tableHeader = '<thead><tr><th>Target</th>';
         periodDates.forEach(date => { tableHeader += `<th>${date.getDate()}</th>`; });
-        tableHeader += '</tr>';
-        let tableBody = '';
+        tableHeader += '</tr></thead>';
+        let tableBody = '<tbody>';
         ['daily', 'weekly', 'monthly'].forEach(period => {
             TARGET_CONFIG[period].forEach(target => {
                 if (kpiSettings[target.id] === false) return;
@@ -455,7 +493,7 @@ function renderTabbedTargetSummary() {
                         const weekStart = getWeekStart(date);
                         const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
                         cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
-                    } else if (period === 'monthly' && date.getDate() === 20) {
+                    } else if (period === 'monthly' && date.getDate() === periodEndDate.getDate()) { // Show on last day of period
                         const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= periodStartDate && dDate <= periodEndDate; }).length;
                         cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
                     }
@@ -464,6 +502,7 @@ function renderTabbedTargetSummary() {
                 tableBody += '</tr>';
             });
         });
+        tableBody += '</tbody>';
         contentContainer.innerHTML += `<div id="${contentId}" class="tab-content ${index === 0 ? 'active' : ''}"><div class="performance-table-wrapper"><table class="performance-table">${tableHeader}${tableBody}</table></div></div>`;
     });
     document.querySelectorAll('.tab-button').forEach(button => {
@@ -639,7 +678,7 @@ function openDetailModal(itemId, sheetName) {
             const dd = document.createElement('dd');
             let value = item[key];
 
-            if (key === 'timestamp') value = item.datestamp;
+            if (key === 'timestamp') value = item.datestamp || formatDate(item.timestamp);
             else if (dateFields.includes(key)) value = formatDate(value);
             else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
             else if (key === 'validationStatus') {
@@ -686,6 +725,8 @@ function setupTimeOffForm() {
     allSalesUsers.forEach(name => {
         salesSelect.innerHTML += `<option value="${name}">${name}</option>`;
     });
+    // Hapus event listener lama sebelum menambahkan yang baru untuk mencegah duplikasi
+    form.removeEventListener('submit', handleTimeOffSubmit);
     form.addEventListener('submit', handleTimeOffSubmit);
 }
 
@@ -718,8 +759,12 @@ function showContentPage(pageId) {
 }
 
 function initializeApp() {
+    if (!currentUser) return;
     document.getElementById('userDisplayName').textContent = currentUser.name;
-    document.getElementById('logoutBtn')?.addEventListener('click', () => auth.signOut());
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        localStorage.removeItem('currentUser');
+        auth.signOut();
+    });
     document.getElementById('refreshValidationBtn')?.addEventListener('click', loadPendingEntries);
     updateDateTime();
     setInterval(updateDateTime, 60000);
@@ -729,5 +774,8 @@ function initializeApp() {
             showContentPage(link.dataset.page);
         });
     });
-    setupFilters(loadInitialData);
-    loadInitialData(true)
+    setupFilters(() => {
+        loadInitialData(false); // false karena bukan load awal
+    });
+    loadInitialData(true); // true karena ini load awal
+}
