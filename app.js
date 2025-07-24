@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.1 - Firebase Integration Case Fix
+ * @version 9.0.3 - Indexing Error Fix
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -13,15 +13,13 @@ auth.onAuthStateChanged(user => {
             currentUser = JSON.parse(userJSON);
             initializeApp();
         } else {
-            // Jika data tidak ada di localStorage, ambil dari Firestore
-            // [FIXED] Mengubah 'users' menjadi 'Users'
             db.collection('Users').doc(user.uid).get().then(doc => {
                 if (doc.exists) {
                     currentUser = { uid: user.uid, email: user.email, ...doc.data() };
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     initializeApp();
                 } else {
-                    auth.signOut(); // Logout jika data user tidak ada
+                    auth.signOut();
                 }
             }).catch(() => auth.signOut());
         }
@@ -32,7 +30,7 @@ auth.onAuthStateChanged(user => {
 
 
 // =================================================================================
-// KONFIGURASI TERPUSAT (SAMA SEPERTI ASLINYA)
+// KONFIGURASI TERPUSAT
 // =================================================================================
 const CONFIG = {
     targets: {
@@ -92,12 +90,6 @@ let performanceReportWeekOffset = 0;
 // FUNGSI PENGAMBILAN & PENGIRIMAN DATA (VERSI FIREBASE)
 // =================================================================================
 
-/**
- * Mengunggah file ke Firebase Storage dan mengembalikan URL-nya.
- * @param {File} file - File yang akan diunggah.
- * @param {string} path - Path di Firebase Storage (e.g., 'proofs/').
- * @returns {Promise<string>} URL download file.
- */
 async function uploadFile(file, path) {
     if (!file) return null;
     const storageRef = storage.ref();
@@ -106,9 +98,6 @@ async function uploadFile(file, path) {
     return await fileRef.getDownloadURL();
 }
 
-/**
- * Memuat semua data yang relevan dari Firestore untuk periode yang dipilih.
- */
 async function loadInitialData() {
     if (isFetchingData) return;
     isFetchingData = true;
@@ -117,20 +106,19 @@ async function loadInitialData() {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
     
-    // Reset data lokal
     currentData = { settings: {}, kpiSettings: {}, timeOff: [] };
 
     try {
         const collectionsToFetch = Object.values(CONFIG.dataMapping).map(m => m.sheetName);
+        
+        // [FIXED] Menghapus filter tanggal dari query Firestore untuk menghindari error indeks.
+        // Pemfilteran tanggal akan dilakukan di sisi klien (browser).
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName)
               .where('sales', '==', currentUser.name)
-              .where('timestamp', '>=', periodStartDate.toISOString())
-              .where('timestamp', '<=', periodEndDate.toISOString())
               .get()
         );
 
-        // Ambil juga data pengaturan
         const settingsPromises = [
             db.collection('settings').doc('kpi').get(),
             db.collection('settings').doc('timeOff').get()
@@ -139,17 +127,22 @@ async function loadInitialData() {
         const allPromises = [...fetchPromises, ...settingsPromises];
         const snapshots = await Promise.all(allPromises);
 
-        // Proses data KPI
         snapshots.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const collectionName = collectionsToFetch[index];
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // [FIXED] Terapkan filter tanggal di sini, setelah data diambil.
+            const filteredData = data.filter(item => {
+                const itemDate = parseCustomDate(item.timestamp || item.datestamp);
+                return itemDate && itemDate >= periodStartDate && itemDate <= periodEndDate;
+            });
+
             const dataKey = Object.keys(CONFIG.dataMapping).find(k => CONFIG.dataMapping[k].sheetName === collectionName);
             if (dataKey) {
-                currentData[CONFIG.dataMapping[dataKey].dataKey] = data;
+                currentData[CONFIG.dataMapping[dataKey].dataKey] = filteredData;
             }
         });
         
-        // Proses data pengaturan
         const kpiSettingsDoc = snapshots[snapshots.length - 2];
         if (kpiSettingsDoc.exists) {
             currentData.kpiSettings = kpiSettingsDoc.data();
@@ -172,9 +165,6 @@ async function loadInitialData() {
     }
 }
 
-/**
- * Menangani pengiriman form, mengunggah file jika ada, dan menyimpan data ke Firestore.
- */
 async function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -198,7 +188,6 @@ async function handleFormSubmit(e) {
             }
         }
         
-        // Handle file uploads
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
                 const downloadURL = await uploadFile(value, `${collectionName}/${key}/`);
@@ -207,7 +196,7 @@ async function handleFormSubmit(e) {
         }
 
         data.sales = currentUser.name;
-        data.timestamp = new Date().toISOString(); // Gunakan ISO string untuk query
+        data.timestamp = new Date().toISOString();
         data.datestamp = getDatestamp();
         data.validationStatus = 'Pending';
         data.validationNotes = '';
@@ -234,10 +223,6 @@ async function handleFormSubmit(e) {
     }
 }
 
-
-/**
- * Menangani update status lead di Firestore.
- */
 async function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
@@ -249,7 +234,6 @@ async function handleUpdateLead(e) {
     button.disabled = true;
 
     try {
-        // Gabungkan semua data lead dan prospek untuk menemukan data yang benar
         const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
         const leadData = allLeadsAndProspects.find(item => item && item.id === leadId);
 
@@ -267,7 +251,6 @@ async function handleUpdateLead(e) {
             throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
         }
 
-        // Tentukan koleksi yang benar untuk update
         const collectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
         await db.collection(collectionName).doc(leadId).update(updateData);
 
@@ -282,9 +265,6 @@ async function handleUpdateLead(e) {
     }
 }
 
-/**
- * Menangani pengiriman data revisi ke Firestore.
- */
 async function handleRevisionSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -299,7 +279,6 @@ async function handleRevisionSubmit(e) {
         const formData = new FormData(form);
         const dataToUpdate = {};
         
-        // Handle file uploads first
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
                 const downloadURL = await uploadFile(value, `${collectionName}/${key}/`);
@@ -309,8 +288,8 @@ async function handleRevisionSubmit(e) {
             }
         }
         
-        dataToUpdate.validationStatus = 'Pending'; // Set status kembali ke Pending
-        dataToUpdate.validationNotes = ''; // Hapus catatan penolakan lama
+        dataToUpdate.validationStatus = 'Pending';
+        dataToUpdate.validationNotes = '';
 
         await db.collection(collectionName).doc(id).update(dataToUpdate);
 
@@ -326,9 +305,7 @@ async function handleRevisionSubmit(e) {
 }
 
 // =================================================================================
-// SEMUA FUNGSI UI & PERHITUNGAN LAINNYA (TETAP SAMA SEPERTI ASLINYA)
-// CUKUP SALIN DAN TEMPEL SEMUA FUNGSI DARI KODE LAMA ANDA DI SINI
-// MULAI DARI `updateAllUI` SAMPAI AKHIR
+// FUNGSI UI & PERHITUNGAN
 // =================================================================================
 
 function updateAllUI() {
@@ -358,9 +335,9 @@ function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
     const data = currentData[dataKey] || [];
     if (!Array.isArray(data)) return 0;
     return data.filter(item => {
-        if (!item || !item.timestamp) return false;
-        const itemDate = new Date(item.timestamp);
-        return !isNaN(itemDate.getTime()) && itemDate >= startDate && itemDate <= endDate;
+        if (!item || !(item.timestamp || item.datestamp)) return false;
+        const itemDate = parseCustomDate(item.timestamp || item.datestamp);
+        return itemDate && itemDate >= startDate && itemDate <= endDate;
     }).length;
 }
 
@@ -437,7 +414,11 @@ function calculatePenaltyForValidationStatus(validationFilter) {
         datesToCheck.forEach(date => {
             if (!isDayOff(date, currentUser.name)) {
                 const achievedToday = getFilteredData(target.dataKey, validationFilter)
-                    .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                    .filter(d => {
+                        if (!d) return false;
+                        const itemDate = parseCustomDate(d.timestamp || d.datestamp);
+                        return itemDate && itemDate.toDateString() === date.toDateString();
+                    }).length;
                 if (achievedToday < target.target) totalPenalty += target.penalty;
             }
         });
@@ -451,8 +432,8 @@ function calculatePenaltyForValidationStatus(validationFilter) {
             const achievedThisWeek = getFilteredData(target.dataKey, validationFilter)
                 .filter(d => {
                     if (!d) return false;
-                    const itemDate = new Date(d.timestamp);
-                    return itemDate >= weekStart && itemDate <= sunday;
+                    const itemDate = parseCustomDate(d.timestamp || d.datestamp);
+                    return itemDate && itemDate >= weekStart && itemDate <= sunday;
                 }).length;
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
         });
@@ -527,8 +508,9 @@ function renderPerformanceReport() {
     allTargets.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         (currentData[target.dataKey] || []).forEach(item => {
-            if (!item || !item.timestamp) return;
-            const itemDate = new Date(item.timestamp);
+            if (!item || !(item.timestamp || item.datestamp)) return;
+            const itemDate = parseCustomDate(item.timestamp || item.datestamp);
+            if (!itemDate) return;
             const dateString = toLocalDateString(itemDate);
             
             if (!dailyCounts[dateString]) dailyCounts[dateString] = {};
@@ -610,6 +592,7 @@ function renderPerformanceReport() {
     table.innerHTML = tableHeaderHTML + tableBodyHTML;
 
     document.getElementById('prevWeekBtn').disabled = (performanceReportWeekOffset === 0);
+    const totalWeeks = Math.ceil(periodDates.length / 7);
     document.getElementById('nextWeekBtn').disabled = (performanceReportWeekOffset >= totalWeeks - 1);
     const startRange = weekDates[0] ? weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
     const endRange = weekDates.length > 0 ? weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
@@ -629,7 +612,7 @@ function updateAllSummaries() {
 }
 
 function updateSimpleSummaryTable(dataKey, mapping, container) {
-    const dataToDisplay = (currentData[dataKey] || []).filter(item => item); // Filter null/undefined
+    const dataToDisplay = (currentData[dataKey] || []).filter(item => item);
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
