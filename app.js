@@ -1,49 +1,19 @@
 /**
  * @file app.js
- * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.9 - Reverted to efficient server-side filtering and fixed B2B product matching.
+ * @description Logika utama untuk dashboard KPI Sales.
+ * @version 8.2.0 - [FIX] Memperbaiki bug salah template form pada modal revisi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
-let currentUser;
-auth.onAuthStateChanged(user => {
-    if (user) {
-        const userJSON = localStorage.getItem('currentUser');
-        if (userJSON) {
-            currentUser = JSON.parse(userJSON);
-            if (currentUser.uid === user.uid) {
-                initializeApp();
-            } else {
-                fetchUserAndInitialize(user);
-            }
-        } else {
-            fetchUserAndInitialize(user);
-        }
-    } else {
-        window.location.href = 'index.html';
-    }
-});
-
-function fetchUserAndInitialize(user) {
-    db.collection('Users').doc(user.uid).get().then(doc => {
-        if (doc.exists) {
-            currentUser = { uid: user.uid, email: user.email, ...doc.data() };
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            initializeApp();
-        } else {
-            showMessage('Data pengguna tidak ditemukan di database.', 'error');
-            auth.signOut();
-        }
-    }).catch(error => {
-        showMessage(`Gagal mengambil data pengguna: ${error.message}`, 'error');
-        auth.signOut();
-    });
-}
-
+const currentUserJSON = localStorage.getItem('currentUser');
+if (!currentUserJSON) { window.location.href = 'index.html'; }
+const currentUser = JSON.parse(currentUserJSON);
 
 // =================================================================================
 // KONFIGURASI TERPUSAT
 // =================================================================================
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbztwK8UXJy1AFxfuftVvVGJzoXLxtnKbS9sZ4VV2fQy3dgmb0BkSR_qBZMWZhLB3pChIg/exec";
+
 const CONFIG = {
     targets: {
         daily: [
@@ -87,150 +57,95 @@ const CONFIG = {
 };
 
 const FORM_PAGE_MAP = {
-    'leads': 'input-lead', 'prospects': 'input-lead', 'b2bBookings': 'input-lead', 'venueBookings': 'input-lead', 'dealLainnya': 'input-lead',
-    'canvasing': 'upload-canvasing', 'promosi': 'upload-promosi', 'doorToDoor': 'door-to-door', 'quotations': 'quotation',
-    'surveys': 'survey-coliving', 'reports': 'laporan-mingguan', 'crmSurveys': 'crm-survey', 'conversions': 'konversi-venue',
-    'events': 'event-networking', 'campaigns': 'launch-campaign'
+    'leads': 'input-lead',
+    'prospects': 'input-lead',
+    'b2bBookings': 'input-lead',
+    'venueBookings': 'input-lead',
+    'dealLainnya': 'input-lead',
+    'canvasing': 'upload-canvasing',
+    'promosi': 'upload-promosi',
+    'doorToDoor': 'door-to-door',
+    'quotations': 'quotation',
+    'surveys': 'survey-coliving',
+    'reports': 'laporan-mingguan',
+    'crmSurveys': 'crm-survey',
+    'conversions': 'konversi-venue',
+    'events': 'event-networking',
+    'campaigns': 'launch-campaign'
 };
 
-let currentData = {};
+let currentData = { settings: {}, kpiSettings: {} };
+Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.dataKey] = []; });
 let isFetchingData = false;
-let performanceReportWeekOffset = 0;
+let performanceReportWeekOffset = 0; // State untuk carousel
 
 // =================================================================================
-// FUNGSI PENGAMBILAN & PENGIRIMAN DATA (VERSI FIREBASE)
+// FUNGSI PENGAMBILAN & PENGIRIMAN DATA
 // =================================================================================
-
-async function uploadFile(file, path) {
-    if (!file) return null;
-    const storageRef = storage.ref();
-    const fileRef = storageRef.child(`${path}${Date.now()}_${file.name}`);
-    await fileRef.put(file);
-    return await fileRef.getDownloadURL();
-}
 
 async function loadInitialData() {
     if (isFetchingData) return;
     isFetchingData = true;
     showMessage("Memuat data dari server...", "info");
-    document.body.style.cursor = 'wait';
-
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
-    
-    currentData = { settings: {}, kpiSettings: {}, timeOff: [] };
-    Object.keys(CONFIG.dataMapping).forEach(key => {
-        currentData[key] = [];
-    });
-
+    const fetchUrl = new URL(SCRIPT_URL);
+    fetchUrl.searchParams.append('action', 'getDataForPeriod');
+    fetchUrl.searchParams.append('startDate', toLocalDateString(periodStartDate));
+    fetchUrl.searchParams.append('endDate', toLocalDateString(periodEndDate));
+    fetchUrl.searchParams.append('salesName', currentUser.name);
     try {
-        const collectionsToFetch = Object.keys(CONFIG.dataMapping);
-        
-        // [REVERTED] Using efficient server-side filtering.
-        // THIS REQUIRES A COMPOSITE INDEX IN FIRESTORE.
-        // If this fails, the console will show an error with a link to create the index.
-        const fetchPromises = collectionsToFetch.map(dataKey => {
-            const collectionName = CONFIG.dataMapping[dataKey].sheetName;
-            return db.collection(collectionName)
-              .where('sales', '==', currentUser.name)
-              .where('timestamp', '>=', periodStartDate.toISOString())
-              .where('timestamp', '<=', periodEndDate.toISOString())
-              .get();
-        });
-
-        const settingsPromises = [
-            db.collection('settings').doc('kpi').get(),
-            db.collection('settings').doc('timeOff').get()
-        ];
-        
-        const allPromises = [...fetchPromises, ...settingsPromises];
-        const results = await Promise.all(allPromises);
-
-        results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
-            const dataKey = collectionsToFetch[index];
-            if (currentData[dataKey]) {
-                currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const response = await fetch(fetchUrl, { mode: 'cors' });
+        const result = await response.json();
+        if (result.status === 'success') {
+            Object.keys(currentData).forEach(key => {
+                if (key !== 'settings' && key !== 'kpiSettings' && key !== 'timeOff') currentData[key] = [];
+            });
+            for (const key in result.data) {
+                currentData[key] = result.data[key] || [];
             }
-        });
-        
-        const kpiSettingsDoc = results[results.length - 2];
-        if (kpiSettingsDoc.exists) {
-            currentData.kpiSettings = kpiSettingsDoc.data();
+            showMessage("Data berhasil dimuat.", "success");
+            performanceReportWeekOffset = 0; // Reset carousel ke minggu pertama
+            updateAllUI();
+        } else {
+            throw new Error(result.message);
         }
-
-        const timeOffDoc = results[results.length - 1];
-        if (timeOffDoc.exists) {
-            currentData.timeOff = timeOffDoc.data().entries || [];
-        }
-
-        showMessage("Data berhasil dimuat.", "success");
-        performanceReportWeekOffset = 0;
-        updateAllUI();
-
     } catch (error) {
-        let errorMessage = `Gagal memuat data awal: ${error.message}`;
-        // Provide specific instructions if the error is a missing index.
-        if (error.code === 'failed-precondition') {
-            errorMessage = 'Gagal memuat data karena indeks database tidak ada. Buka Console (F12), cari pesan error, lalu klik link yang diberikan untuk membuat indeks secara otomatis di Firebase. Setelah indeks selesai dibuat (beberapa menit), refresh halaman ini.';
-        }
-        showMessage(errorMessage, 'error');
+        showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
         console.error("Load data error:", error);
     } finally {
         isFetchingData = false;
-        document.body.style.cursor = 'default';
     }
 }
 
-async function handleFormSubmit(e) {
-    e.preventDefault();
-    const form = e.target;
-    const collectionName = form.dataset.sheetName;
-    if (!collectionName) return;
-
-    const button = form.querySelector('button[type="submit"]');
+async function sendData(action, payloadData, event) {
+    const button = event ? event.target.querySelector('button[type="submit"]') : null;
     let originalButtonText = '';
     if (button) {
         originalButtonText = button.innerHTML;
         button.innerHTML = '<span class="loading"></span> Mengirim...';
         button.disabled = true;
     }
-
     try {
-        const formData = new FormData(form);
-        const data = {};
-        for (const [key, value] of formData.entries()) {
-            if (!(value instanceof File)) {
-                data[key] = value;
-            }
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, ...payloadData })
+        });
+        if (!response.ok) throw new Error(`Server merespons dengan status: ${response.status}`);
+        const result = await response.json();
+        if (result.status === 'success') {
+            showMessage('Data berhasil diproses!', 'success');
+            await loadInitialData();
+            if (event) event.target.reset();
+            closeModal();
+        } else {
+            throw new Error(result.message || 'Terjadi kesalahan di server.');
         }
-        
-        for (const [key, value] of formData.entries()) {
-            if (value instanceof File && value.size > 0) {
-                const downloadURL = await uploadFile(value, `${collectionName}/${currentUser.uid}/${key}/`);
-                data[key] = downloadURL;
-            }
-        }
-
-        data.sales = currentUser.name;
-        data.timestamp = new Date().toISOString(); 
-        data.datestamp = getDatestamp();
-        data.validationStatus = 'Pending';
-        data.validationNotes = '';
-        
-        if (collectionName === 'Leads') {
-            data.status = 'Lead';
-            data.statusLog = `${getDatestamp()}: Dibuat sebagai Lead.`;
-        }
-        
-        await db.collection(collectionName).add(data);
-        
-        showMessage('Data berhasil disimpan!', 'success');
-        await loadInitialData();
-        form.reset();
-        
     } catch (error) {
-        showMessage(`Gagal menyimpan data: ${error.message}.`, 'error');
-        console.error("Save data error:", error);
+        showMessage(`Gagal memproses data: ${error.message}.`, 'error');
+        console.error("Send data error:", error);
     } finally {
         if (button) {
             button.innerHTML = originalButtonText;
@@ -239,150 +154,114 @@ async function handleFormSubmit(e) {
     }
 }
 
-// [REVISED] Helper function to determine the correct "Deal" collection based on product type.
-function getDealCollectionName(product) {
-    const productLower = product.toLowerCase();
-    // Use a more specific check for B2B
-    if (product === 'Kamar Hotel B2B') {
-        return 'B2BBookings';
-    } else if (productLower.includes('venue') || productLower.includes('package')) {
-        return 'VenueBookings';
+async function handleFormSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const sheetName = form.dataset.sheetName;
+    if (!sheetName) return;
+    const formData = new FormData(form);
+    const data = {};
+    for (const [key, value] of formData.entries()) {
+        if (value instanceof File && value.size > 0) continue;
+        data[key] = value;
     }
-    // Default or other deal types can be handled here
-    return 'Deal Lainnya';
+    const fileInputs = form.querySelectorAll('input[type="file"]');
+    for (const fileInput of fileInputs) {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            data[fileInput.name] = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        }
+    }
+    data.id = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    data.sales = currentUser.name;
+    data.timestamp = getLocalTimestampString();
+    data.datestamp = getDatestamp();
+    if (sheetName === 'Leads') {
+        data.status = 'Lead';
+        data.statusLog = '';
+    }
+    const payload = { sheetName, data };
+    sendData('saveData', payload, e);
 }
 
-
-// [REVISED] This function now copies and updates data, preserving history.
 async function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
     const leadId = form.querySelector('#updateLeadId').value;
     const newStatus = form.querySelector('#updateStatus').value;
-    const notes = form.querySelector('#statusLog').value;
+    const statusLog = form.querySelector('#statusLog').value;
+    
+    const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
+    const leadData = { ...allLeadsAndProspects.find(item => item && item.id === leadId) };
 
-    const button = form.querySelector('button[type="submit"]');
-    button.disabled = true;
-
-    try {
-        const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
-        const leadData = allLeadsAndProspects.find(item => item && item.id === leadId);
-
-        if (!leadData) throw new Error('Data asli tidak ditemukan!');
-
-        const sourceCollectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
-        const originalDocRef = db.collection(sourceCollectionName).doc(leadId);
-        
-        // --- SCENARIO 1: Lead becomes a Prospect ---
-        if (sourceCollectionName === 'Leads' && newStatus === 'Prospect') {
-            const originalDoc = await originalDocRef.get();
-            if (!originalDoc.exists) throw new Error("Dokumen Lead asli tidak ditemukan di database.");
-
-            // 1. Create new data for the 'Prospects' collection
-            const newData = { ...originalDoc.data() };
-            newData.status = 'Prospect';
-            newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Prospect. Catatan: ${notes}`;
-            
-            // 2. Add the new document to the 'Prospects' collection
-            await db.collection('Prospects').add(newData);
-
-            // 3. Update the original document in 'Leads' instead of deleting it
-            await originalDocRef.update({
-                status: 'Prospect',
-                statusLog: newData.statusLog
-            });
-
-        // --- SCENARIO 2: Lead or Prospect becomes a Deal ---
-        } else if (newStatus === 'Deal') {
-            const originalDoc = await originalDocRef.get();
-            if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
-
-            const dealCollectionName = getDealCollectionName(leadData.product);
-            
-            // 1. Create new data for the appropriate "Deal" collection
-            const newData = { ...originalDoc.data() };
-            newData.status = 'Deal';
-            newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Deal. Catatan: ${notes}`;
-            
-            const proofInput = form.querySelector('#modalProofOfDeal');
-            if (proofInput && proofInput.files.length > 0) {
-                newData.proofOfDeal = await uploadFile(proofInput.files[0], 'proofsOfDeal/');
-            } else if (!leadData.proofOfDeal) {
-                throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
-            }
-
-            // 2. Add the new document to the "Deal" collection
-            await db.collection(dealCollectionName).add(newData);
-
-            // 3. Update the original document in its source collection
-            await originalDocRef.update({
-                status: 'Deal',
-                statusLog: newData.statusLog
-            });
-
-        // --- SCENARIO 3: Any other status update (e.g., to "Lost") ---
-        } else {
-            const updatedLog = (leadData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi ${newStatus}. Catatan: ${notes}`;
-            await originalDocRef.update({
-                status: newStatus,
-                statusLog: updatedLog
-            });
-        }
-
-        showMessage('Status berhasil diperbarui!', 'success');
-        await loadInitialData();
-        closeModal();
-
-    } catch (error) {
-        showMessage(`Gagal memperbarui status: ${error.message}`, 'error');
-        console.error("Update Lead Error:", error);
-    } finally {
-        button.disabled = false;
+    if (!leadData) {
+        showMessage('Data asli untuk diupdate tidak ditemukan!', 'error');
+        return;
     }
-}
 
+    if (newStatus === 'Deal') {
+        const proofInput = form.querySelector('#modalProofOfDeal');
+        if (proofInput && proofInput.files.length > 0) {
+            const file = proofInput.files[0];
+            leadData.proofOfDeal = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        } else {
+            showMessage('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".', 'error');
+            return;
+        }
+    }
+
+    const originalLeadId = leadData.id.startsWith('prospect_') ? leadData.id.replace('prospect_', 'item_') : leadData.id;
+    const payload = { leadId: originalLeadId, newStatus, statusLog, leadData };
+    sendData('updateLeadStatus', payload, e);
+}
 
 async function handleRevisionSubmit(e) {
     e.preventDefault();
     const form = e.target;
-    const collectionName = form.dataset.sheetName;
+    const sheetName = form.dataset.sheetName;
     const id = form.dataset.id;
-    if (!collectionName || !id) return;
+    if (!sheetName || !id) return;
 
-    const button = form.querySelector('button[type="submit"]');
-    button.disabled = true;
-
-    try {
-        const formData = new FormData(form);
-        const dataToUpdate = {};
-        
-        for (const [key, value] of formData.entries()) {
-            if (value instanceof File && value.size > 0) {
-                const downloadURL = await uploadFile(value, `${collectionName}/${key}/`);
-                dataToUpdate[key] = downloadURL;
-            } else if (!(value instanceof File)) {
-                dataToUpdate[key] = value;
-            }
-        }
-        
-        dataToUpdate.validationStatus = 'Pending';
-        dataToUpdate.validationNotes = '';
-
-        await db.collection(collectionName).doc(id).update(dataToUpdate);
-
-        showMessage('Data revisi berhasil dikirim!', 'success');
-        await loadInitialData();
-        closeModal();
-
-    } catch (error) {
-        showMessage(`Gagal mengirim revisi: ${error.message}`, 'error');
-    } finally {
-        button.disabled = false;
+    const formData = new FormData(form);
+    const data = {};
+    for (const [key, value] of formData.entries()) {
+        if (value instanceof File && value.size > 0) continue;
+        data[key] = value;
     }
+
+    const fileInputs = form.querySelectorAll('input[type="file"]');
+    for (const fileInput of fileInputs) {
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            data[fileInput.name] = {
+                fileName: file.name,
+                mimeType: file.type,
+                data: await toBase64(file)
+            };
+        }
+    }
+
+    delete data.timestamp;
+    delete data.datestamp;
+    
+    data.id = id;
+    data.sales = currentUser.name;
+
+    const payload = { sheetName, id, data };
+    sendData('reviseData', payload, e);
 }
 
+
 // =================================================================================
-// FUNGSI UI & PERHITUNGAN
+// FUNGSI UTAMA UI & PERHITUNGAN
 // =================================================================================
 
 function updateAllUI() {
@@ -412,14 +291,13 @@ function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
     const data = currentData[dataKey] || [];
     if (!Array.isArray(data)) return 0;
     return data.filter(item => {
-        if (!item || !(item.timestamp || item.datestamp)) return false;
-        const itemDate = new Date(item.timestamp); 
-        return itemDate && itemDate >= startDate && itemDate <= endDate;
+        if (!item || !item.timestamp) return false;
+        const itemDate = new Date(item.timestamp);
+        return !isNaN(itemDate.getTime()) && itemDate >= startDate && itemDate <= endDate;
     }).length;
 }
 
 function updateDashboard() {
-    if (!currentUser || !currentData.kpiSettings) return;
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const kpiSettings = currentData.kpiSettings || {};
 
@@ -485,18 +363,14 @@ function calculatePenaltyForValidationStatus(validationFilter) {
     today.setHours(0, 0, 0, 0);
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
 
-    if (today < periodStartDate || !currentData.timeOff) return 0;
+    if (today < periodStartDate) return 0;
 
     CONFIG.targets.daily.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         datesToCheck.forEach(date => {
             if (!isDayOff(date, currentUser.name)) {
                 const achievedToday = getFilteredData(target.dataKey, validationFilter)
-                    .filter(d => {
-                        if (!d) return false;
-                        const itemDate = new Date(d.timestamp);
-                        return itemDate && itemDate.toDateString() === date.toDateString();
-                    }).length;
+                    .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
                 if (achievedToday < target.target) totalPenalty += target.penalty;
             }
         });
@@ -511,7 +385,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
                 .filter(d => {
                     if (!d) return false;
                     const itemDate = new Date(d.timestamp);
-                    return itemDate && itemDate >= weekStart && itemDate <= sunday;
+                    return itemDate >= weekStart && itemDate <= sunday;
                 }).length;
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
         });
@@ -567,6 +441,10 @@ function updateProgressBar(type, achieved, total) {
     if (totalText) totalText.textContent = total;
 }
 
+// =================================================================================
+// LAPORAN KINERJA RINCI & TABEL DATA
+// =================================================================================
+
 function renderPerformanceReport() {
     const table = document.getElementById('performanceTable');
     const kpiSettings = currentData.kpiSettings || {};
@@ -578,6 +456,7 @@ function renderPerformanceReport() {
         table.innerHTML = '<tbody><tr><td>Pilih periode untuk melihat laporan.</td></tr></tbody>';
         return;
     }
+    const totalWeeks = Math.ceil(periodDates.length / 7);
     const weekDates = periodDates.slice(performanceReportWeekOffset * 7, (performanceReportWeekOffset * 7) + 7);
 
     const dailyCounts = {};
@@ -587,7 +466,6 @@ function renderPerformanceReport() {
         (currentData[target.dataKey] || []).forEach(item => {
             if (!item || !item.timestamp) return;
             const itemDate = new Date(item.timestamp);
-            if (!itemDate) return;
             const dateString = toLocalDateString(itemDate);
             
             if (!dailyCounts[dateString]) dailyCounts[dateString] = {};
@@ -669,7 +547,6 @@ function renderPerformanceReport() {
     table.innerHTML = tableHeaderHTML + tableBodyHTML;
 
     document.getElementById('prevWeekBtn').disabled = (performanceReportWeekOffset === 0);
-    const totalWeeks = Math.ceil(periodDates.length / 7);
     document.getElementById('nextWeekBtn').disabled = (performanceReportWeekOffset >= totalWeeks - 1);
     const startRange = weekDates[0] ? weekDates[0].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
     const endRange = weekDates.length > 0 ? weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
@@ -689,7 +566,7 @@ function updateAllSummaries() {
 }
 
 function updateSimpleSummaryTable(dataKey, mapping, container) {
-    const dataToDisplay = (currentData[dataKey] || []).filter(item => item);
+    const dataToDisplay = getFilteredData(dataKey, ['all']);
     if (dataToDisplay.length === 0) {
         container.innerHTML = `<div class="empty-state">Belum ada data untuk periode ini</div>`;
         return;
@@ -708,9 +585,7 @@ function updateLeadTabs() {
     const allLeads = currentData.leads || [];
     const allProspects = currentData.prospects || [];
     
-    // The "Lead" tab should ONLY show items with status "Lead".
     const leads = allLeads.filter(item => item && item.status === 'Lead');
-    // The "Prospect" tab shows everything from the "Prospects" collection.
     const prospects = allProspects;
 
     renderLeadTable(leadContainer, leads, 'leads');
@@ -817,6 +692,11 @@ function generateDealRow(item, dataKey) {
         </tr>`;
 }
 
+
+// =================================================================================
+// FUNGSI MODAL & INTERAKSI
+// =================================================================================
+
 function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
@@ -881,6 +761,7 @@ function openRevisionModal(itemId, dataKey) {
     formContainer.dataset.sheetName = mapping.sheetName;
     formContainer.dataset.id = item.id;
 
+    // [FIX] Menggunakan mapping baru untuk menemukan template form yang benar
     const pageId = FORM_PAGE_MAP[dataKey];
     const formTemplate = pageId ? document.querySelector(`#${pageId} .kpi-form`) : null;
     
@@ -905,6 +786,7 @@ function openRevisionModal(itemId, dataKey) {
 
     modal.classList.add('active');
 }
+
 
 function closeModal() {
     document.getElementById('updateLeadModal')?.classList.remove('active');
@@ -948,7 +830,7 @@ function openDetailModal(itemId, dataKey) {
             const dd = document.createElement('dd');
             let value = item[key];
 
-            if (key === 'timestamp') value = item.datestamp || formatDate(item.timestamp);
+            if (key === 'timestamp') value = item.datestamp;
             else if (dateFields.includes(key)) value = formatDate(value);
             else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
             else if (key === 'validationStatus') {
@@ -960,14 +842,24 @@ function openDetailModal(itemId, dataKey) {
             }
             
             dd.textContent = value;
-            detailList.appendChild(dt);
-            detailList.appendChild(dd);
+            detailList.appendChild(dt); detailList.appendChild(dd);
         }
     }
     
     modalBody.appendChild(detailList);
     modal.classList.add('active');
 }
+
+// =================================================================================
+// FUNGSI UTILITAS & INISIALISASI
+// =================================================================================
+
+const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = error => reject(error);
+});
 
 function isDayOff(date, salesName) {
     if (date.getDay() === 0) return true; // Minggu selalu libur
@@ -990,10 +882,7 @@ function setupEventListeners() {
         e.preventDefault();
         showContentPage(link.getAttribute('data-page'));
     }));
-    document.getElementById('logoutBtn')?.addEventListener('click', () => {
-        localStorage.removeItem('currentUser');
-        auth.signOut();
-    });
+    document.getElementById('logoutBtn')?.addEventListener('click', logout);
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
     document.getElementById('revisionForm')?.addEventListener('submit', handleRevisionSubmit);
     
@@ -1006,6 +895,7 @@ function setupEventListeners() {
         });
     });
 
+    // Event listener untuk navigasi carousel
     document.getElementById('prevWeekBtn').addEventListener('click', () => {
         if (performanceReportWeekOffset > 0) {
             performanceReportWeekOffset--;
@@ -1030,8 +920,10 @@ function initializeApp() {
     setInterval(updateDateTime, 60000);
     setupEventListeners();
     setupFilters(() => {
-        performanceReportWeekOffset = 0;
+        performanceReportWeekOffset = 0; // Reset carousel saat filter berubah
         loadInitialData();
     });
-    // Panggil loadInitialData setelah filter di-setup dan nilai awalnya ditetapkan
-    loadInitialDat
+    loadInitialData();
+}
+
+document.addEventListener('DOMContentLoaded', initializeApp);
