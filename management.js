@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.4 - Implemented transactional updates for validation to prevent race conditions.
+ * @version 7.0.5 - Implemented pre-check on validation transaction to prevent errors and improve UI feedback.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -98,7 +98,6 @@ async function loadInitialData(isInitialLoad = false) {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
 
-    // Inisialisasi struktur data
     allData = {};
     Object.values(CONFIG.dataMapping).forEach(mapping => {
         if (mapping.dataKey) {
@@ -207,7 +206,7 @@ async function loadPendingEntries() {
     }
 }
 
-// [FIXED] Using a transaction for validation to prevent race conditions.
+// [REVISED] Using a transaction for validation with a pre-check.
 async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
     if (type === 'reject') {
@@ -225,14 +224,20 @@ async function handleValidation(buttonElement, sheetName, id, type) {
     const docRef = db.collection(sheetName).doc(id);
 
     try {
+        // Pre-flight check to see if the document exists right before the transaction.
+        const preCheckDoc = await docRef.get();
+        if (!preCheckDoc.exists) {
+            throw new Error("Dokumen tidak ditemukan saat pemeriksaan awal. Data mungkin sudah tidak valid. Silakan refresh.");
+        }
+
+        // Proceed with the transaction.
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(docRef);
             if (!doc.exists) {
-                // This specific error message will be shown to the user.
-                throw new Error("Dokumen tidak ditemukan. Mungkin sudah divalidasi atau dihapus oleh manajer lain.");
+                // This error means the doc was deleted between the pre-check and the transaction start.
+                throw new Error("Dokumen tidak ditemukan di dalam transaksi. Terjadi konflik, coba lagi.");
             }
 
-            // If the document exists, proceed with the update.
             transaction.update(docRef, {
                 validationStatus: type === 'approve' ? 'Approved' : 'Rejected',
                 validationNotes: notes
@@ -241,6 +246,7 @@ async function handleValidation(buttonElement, sheetName, id, type) {
 
         showMessage('Validasi berhasil disimpan.', 'success');
         
+        // --- UI Update Logic ---
         // Animate and remove the row from the UI.
         const row = actionCell.parentElement;
         row.style.transition = 'opacity 0.5s ease';
@@ -254,9 +260,9 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         }, 500);
 
     } catch (error) {
-        // Display the specific error message from the transaction or a generic one.
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
         console.error("Validation failed:", error);
+        // Re-enable buttons only on failure.
         actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
     }
 }
@@ -779,5 +785,4 @@ function initializeApp() {
     setupFilters(() => {
         loadInitialData(false);
     });
-    loadInitialData(true);
-}
+    loadInitialData(true)
