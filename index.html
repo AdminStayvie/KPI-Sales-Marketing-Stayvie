@@ -18,8 +18,8 @@
                     </div>
                     <form id="loginForm" class="login-form">
                         <div class="form-group">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" id="username" class="form-control" required autocomplete="username">
+                            <label for="username" class="form-label">Email</label>
+                            <input type="email" id="username" class="form-control" required autocomplete="username">
                         </div>
                         <div class="form-group">
                             <label for="password" class="form-label">Password</label>
@@ -32,6 +32,39 @@
             </div>
         </div>
     </div>
+
+    <!-- ====================================================== -->
+    <!--          SKRIP FIREBASE - MULAI DARI SINI            -->
+    <!-- ====================================================== -->
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <!-- Skrip Inisialisasi Firebase -->
+    <script>
+      // !!! PENTING: GANTI DENGAN KONFIGURASI FIREBASE ANDA SENDIRI !!!
+      const firebaseConfig = {
+        apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
+        authDomain: "admin-stayvie.firebaseapp.com",
+        projectId: "admin-stayvie",
+        storageBucket: "admin-stayvie.appspot.com",
+        messagingSenderId: "263821398757",
+        appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
+      };
+
+      // Inisialisasi Firebase
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+    </script>
+
+    <!-- ====================================================== -->
+    <!--           SKRIP FIREBASE - SELESAI DI SINI             -->
+    <!-- ====================================================== -->
 
     <!-- Script khusus untuk halaman login -->
     <script src="login.js"></script>
