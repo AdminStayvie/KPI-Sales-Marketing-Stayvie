@@ -29,7 +29,7 @@
         .detail-list dt { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
         .detail-list dd { margin: 0; word-break: break-word; }
         .detail-list dd a { color: var(--color-primary); }
-        .summary-table tbody tr { cursor: pointer; transition: background-color 0.2s ease; }
+        .summary-table tbody tr { cursor: pointer; transition: background-color: 0.2s ease; }
         .summary-table tbody tr:hover { background-color: var(--color-secondary); }
         .tabs-container { display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-16); }
         .tab-button {
@@ -227,15 +227,15 @@
 
     <!-- Skrip Inisialisasi Firebase -->
     <script>
-      // !!! PENTING: GANTI DENGAN KONFIGURASI FIREBASE ANDA SENDIRI !!!
+      // Konfigurasi yang BENAR dari Firebase Console
       const firebaseConfig = {
-  apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
-  authDomain: "admin-stayvie.firebaseapp.com",
-  projectId: "admin-stayvie",
-  storageBucket: "admin-stayvie.firebasestorage.app",
-  messagingSenderId: "263821398757",
-  appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
-};
+        apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
+        authDomain: "admin-stayvie.firebaseapp.com",
+        projectId: "admin-stayvie",
+        storageBucket: "admin-stayvie.firebasestorage.app",
+        messagingSenderId: "263821398757",
+        appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
+      };
 
       // Inisialisasi Firebase
       if (!firebase.apps.length) {
