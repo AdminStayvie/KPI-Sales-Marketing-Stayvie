@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.8 - Modified deal collection logic to include 'package' in 'VenueBookings'.
+ * @version 9.0.9 - Reverted to efficient server-side filtering and fixed B2B product matching.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -126,10 +126,15 @@ async function loadInitialData() {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
+        // [REVERTED] Using efficient server-side filtering.
+        // THIS REQUIRES A COMPOSITE INDEX IN FIRESTORE.
+        // If this fails, the console will show an error with a link to create the index.
         const fetchPromises = collectionsToFetch.map(dataKey => {
             const collectionName = CONFIG.dataMapping[dataKey].sheetName;
             return db.collection(collectionName)
               .where('sales', '==', currentUser.name)
+              .where('timestamp', '>=', periodStartDate.toISOString())
+              .where('timestamp', '<=', periodEndDate.toISOString())
               .get();
         });
 
@@ -144,12 +149,7 @@ async function loadInitialData() {
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const dataKey = collectionsToFetch[index];
             if (currentData[dataKey]) {
-                const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                currentData[dataKey] = allDocs.filter(item => {
-                    if (!item.timestamp) return false;
-                    const itemDate = new Date(item.timestamp);
-                    return itemDate >= periodStartDate && itemDate <= periodEndDate;
-                });
+                currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             }
         });
         
@@ -169,6 +169,10 @@ async function loadInitialData() {
 
     } catch (error) {
         let errorMessage = `Gagal memuat data awal: ${error.message}`;
+        // Provide specific instructions if the error is a missing index.
+        if (error.code === 'failed-precondition') {
+            errorMessage = 'Gagal memuat data karena indeks database tidak ada. Buka Console (F12), cari pesan error, lalu klik link yang diberikan untuk membuat indeks secara otomatis di Firebase. Setelah indeks selesai dibuat (beberapa menit), refresh halaman ini.';
+        }
         showMessage(errorMessage, 'error');
         console.error("Load data error:", error);
     } finally {
@@ -238,9 +242,10 @@ async function handleFormSubmit(e) {
 // [REVISED] Helper function to determine the correct "Deal" collection based on product type.
 function getDealCollectionName(product) {
     const productLower = product.toLowerCase();
-    if (productLower.includes('b2b')) {
+    // Use a more specific check for B2B
+    if (product === 'Kamar Hotel B2B') {
         return 'B2BBookings';
-    } else if (productLower.includes('venue') || productLower.includes('package')) { // Logic updated here
+    } else if (productLower.includes('venue') || productLower.includes('package')) {
         return 'VenueBookings';
     }
     // Default or other deal types can be handled here
@@ -1029,4 +1034,4 @@ function initializeApp() {
         loadInitialData();
     });
     // Panggil loadInitialData setelah filter di-setup dan nilai awalnya ditetapkan
-    loadInitialData()
+    loadInitialDat
