@@ -1,32 +1,47 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.3 - Indexing Error Fix
+ * @version 9.0.5 - Ensure full script integrity.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 let currentUser;
 auth.onAuthStateChanged(user => {
     if (user) {
+        // Coba ambil dari localStorage dulu untuk loading lebih cepat
         const userJSON = localStorage.getItem('currentUser');
         if (userJSON) {
             currentUser = JSON.parse(userJSON);
-            initializeApp();
+            // Pastikan user di localStorage sesuai dengan yang login
+            if (currentUser.uid === user.uid) {
+                initializeApp();
+            } else { // Jika tidak sesuai, fetch dari DB
+                fetchUserAndInitialize(user);
+            }
         } else {
-            db.collection('Users').doc(user.uid).get().then(doc => {
-                if (doc.exists) {
-                    currentUser = { uid: user.uid, email: user.email, ...doc.data() };
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    initializeApp();
-                } else {
-                    auth.signOut();
-                }
-            }).catch(() => auth.signOut());
+            fetchUserAndInitialize(user);
         }
     } else {
         window.location.href = 'index.html';
     }
 });
+
+function fetchUserAndInitialize(user) {
+    db.collection('Users').doc(user.uid).get().then(doc => {
+        if (doc.exists) {
+            currentUser = { uid: user.uid, email: user.email, ...doc.data() };
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            initializeApp();
+        } else {
+            // Jika data user tidak ditemukan, logout
+            showMessage('Data pengguna tidak ditemukan di database.', 'error');
+            auth.signOut();
+        }
+    }).catch(error => {
+        showMessage(`Gagal mengambil data pengguna: ${error.message}`, 'error');
+        auth.signOut();
+    });
+}
 
 
 // =================================================================================
@@ -81,8 +96,7 @@ const FORM_PAGE_MAP = {
     'events': 'event-networking', 'campaigns': 'launch-campaign'
 };
 
-let currentData = { settings: {}, kpiSettings: {} };
-Object.values(CONFIG.dataMapping).forEach(map => { currentData[map.sheetName] = []; });
+let currentData = {};
 let isFetchingData = false;
 let performanceReportWeekOffset = 0;
 
@@ -102,22 +116,30 @@ async function loadInitialData() {
     if (isFetchingData) return;
     isFetchingData = true;
     showMessage("Memuat data dari server...", "info");
+    document.body.style.cursor = 'wait';
 
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
     
+    // Inisialisasi struktur data
     currentData = { settings: {}, kpiSettings: {}, timeOff: [] };
+    Object.keys(CONFIG.dataMapping).forEach(key => {
+        currentData[key] = [];
+    });
 
     try {
-        const collectionsToFetch = Object.values(CONFIG.dataMapping).map(m => m.sheetName);
+        const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [FIXED] Menghapus filter tanggal dari query Firestore untuk menghindari error indeks.
-        // Pemfilteran tanggal akan dilakukan di sisi klien (browser).
-        const fetchPromises = collectionsToFetch.map(collectionName => 
-            db.collection(collectionName)
+        // [FIXED] Menggunakan query yang efisien dengan filter tanggal di server.
+        // INI MEMBUTUHKAN INDEX COMPOSITE DI FIRESTORE: (sales, ascending) dan (timestamp, ascending/descending)
+        const fetchPromises = collectionsToFetch.map(dataKey => {
+            const collectionName = CONFIG.dataMapping[dataKey].sheetName;
+            return db.collection(collectionName)
               .where('sales', '==', currentUser.name)
-              .get()
-        );
+              .where('timestamp', '>=', periodStartDate.toISOString())
+              .where('timestamp', '<=', periodEndDate.toISOString())
+              .get();
+        });
 
         const settingsPromises = [
             db.collection('settings').doc('kpi').get(),
@@ -125,30 +147,23 @@ async function loadInitialData() {
         ];
         
         const allPromises = [...fetchPromises, ...settingsPromises];
-        const snapshots = await Promise.all(allPromises);
+        const results = await Promise.all(allPromises);
 
-        snapshots.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
-            const collectionName = collectionsToFetch[index];
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // [FIXED] Terapkan filter tanggal di sini, setelah data diambil.
-            const filteredData = data.filter(item => {
-                const itemDate = parseCustomDate(item.timestamp || item.datestamp);
-                return itemDate && itemDate >= periodStartDate && itemDate <= periodEndDate;
-            });
-
-            const dataKey = Object.keys(CONFIG.dataMapping).find(k => CONFIG.dataMapping[k].sheetName === collectionName);
-            if (dataKey) {
-                currentData[CONFIG.dataMapping[dataKey].dataKey] = filteredData;
+        // Memproses data KPI
+        results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
+            const dataKey = collectionsToFetch[index];
+            if (currentData[dataKey]) {
+                currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             }
         });
         
-        const kpiSettingsDoc = snapshots[snapshots.length - 2];
+        // Memproses data pengaturan
+        const kpiSettingsDoc = results[results.length - 2];
         if (kpiSettingsDoc.exists) {
             currentData.kpiSettings = kpiSettingsDoc.data();
         }
 
-        const timeOffDoc = snapshots[snapshots.length - 1];
+        const timeOffDoc = results[results.length - 1];
         if (timeOffDoc.exists) {
             currentData.timeOff = timeOffDoc.data().entries || [];
         }
@@ -158,10 +173,16 @@ async function loadInitialData() {
         updateAllUI();
 
     } catch (error) {
-        showMessage(`Gagal memuat data awal: ${error.message}`, 'error');
+        // Menampilkan pesan error yang lebih informatif
+        let errorMessage = `Gagal memuat data awal: ${error.message}`;
+        if (error.code === 'failed-precondition') {
+            errorMessage = 'Gagal memuat data. Diperlukan indeks database. Silakan buka Console (F12), cari error, dan klik link untuk membuat indeks di Firebase.';
+        }
+        showMessage(errorMessage, 'error');
         console.error("Load data error:", error);
     } finally {
         isFetchingData = false;
+        document.body.style.cursor = 'default';
     }
 }
 
@@ -190,14 +211,15 @@ async function handleFormSubmit(e) {
         
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
-                const downloadURL = await uploadFile(value, `${collectionName}/${key}/`);
+                const downloadURL = await uploadFile(value, `${collectionName}/${currentUser.uid}/${key}/`);
                 data[key] = downloadURL;
             }
         }
 
         data.sales = currentUser.name;
-        data.timestamp = new Date().toISOString();
-        data.datestamp = getDatestamp();
+        // [MODIFIED] Menggunakan ISOString untuk konsistensi query tanggal
+        data.timestamp = new Date().toISOString(); 
+        data.datestamp = getDatestamp(); // Tetap simpan untuk display
         data.validationStatus = 'Pending';
         data.validationNotes = '';
         
@@ -209,6 +231,7 @@ async function handleFormSubmit(e) {
         await db.collection(collectionName).add(data);
         
         showMessage('Data berhasil disimpan!', 'success');
+        // Muat ulang data setelah submit berhasil
         await loadInitialData();
         form.reset();
         
@@ -336,12 +359,14 @@ function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
     if (!Array.isArray(data)) return 0;
     return data.filter(item => {
         if (!item || !(item.timestamp || item.datestamp)) return false;
-        const itemDate = parseCustomDate(item.timestamp || item.datestamp);
+        // Menggunakan timestamp (ISO string) untuk perbandingan yang andal
+        const itemDate = new Date(item.timestamp); 
         return itemDate && itemDate >= startDate && itemDate <= endDate;
     }).length;
 }
 
 function updateDashboard() {
+    if (!currentUser || !currentData.kpiSettings) return; // Guard clause
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const kpiSettings = currentData.kpiSettings || {};
 
@@ -407,7 +432,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
     today.setHours(0, 0, 0, 0);
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
 
-    if (today < periodStartDate) return 0;
+    if (today < periodStartDate || !currentData.timeOff) return 0;
 
     CONFIG.targets.daily.forEach(target => {
         if (kpiSettings[target.id] === false) return;
@@ -416,7 +441,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
                 const achievedToday = getFilteredData(target.dataKey, validationFilter)
                     .filter(d => {
                         if (!d) return false;
-                        const itemDate = parseCustomDate(d.timestamp || d.datestamp);
+                        const itemDate = new Date(d.timestamp);
                         return itemDate && itemDate.toDateString() === date.toDateString();
                     }).length;
                 if (achievedToday < target.target) totalPenalty += target.penalty;
@@ -432,7 +457,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
             const achievedThisWeek = getFilteredData(target.dataKey, validationFilter)
                 .filter(d => {
                     if (!d) return false;
-                    const itemDate = parseCustomDate(d.timestamp || d.datestamp);
+                    const itemDate = new Date(d.timestamp);
                     return itemDate && itemDate >= weekStart && itemDate <= sunday;
                 }).length;
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
@@ -500,7 +525,6 @@ function renderPerformanceReport() {
         table.innerHTML = '<tbody><tr><td>Pilih periode untuk melihat laporan.</td></tr></tbody>';
         return;
     }
-    const totalWeeks = Math.ceil(periodDates.length / 7);
     const weekDates = periodDates.slice(performanceReportWeekOffset * 7, (performanceReportWeekOffset * 7) + 7);
 
     const dailyCounts = {};
@@ -508,8 +532,8 @@ function renderPerformanceReport() {
     allTargets.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         (currentData[target.dataKey] || []).forEach(item => {
-            if (!item || !(item.timestamp || item.datestamp)) return;
-            const itemDate = parseCustomDate(item.timestamp || item.datestamp);
+            if (!item || !item.timestamp) return;
+            const itemDate = new Date(item.timestamp);
             if (!itemDate) return;
             const dateString = toLocalDateString(itemDate);
             
@@ -869,7 +893,7 @@ function openDetailModal(itemId, dataKey) {
             const dd = document.createElement('dd');
             let value = item[key];
 
-            if (key === 'timestamp') value = item.datestamp;
+            if (key === 'timestamp') value = item.datestamp || formatDate(item.timestamp);
             else if (dateFields.includes(key)) value = formatDate(value);
             else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
             else if (key === 'validationStatus') {
@@ -881,7 +905,8 @@ function openDetailModal(itemId, dataKey) {
             }
             
             dd.textContent = value;
-            detailList.appendChild(dt); detailList.appendChild(dd);
+            detailList.appendChild(dt);
+            detailList.appendChild(dd);
         }
     }
     
@@ -910,7 +935,10 @@ function setupEventListeners() {
         e.preventDefault();
         showContentPage(link.getAttribute('data-page'));
     }));
-    document.getElementById('logoutBtn')?.addEventListener('click', () => auth.signOut());
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        localStorage.removeItem('currentUser');
+        auth.signOut();
+    });
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
     document.getElementById('revisionForm')?.addEventListener('submit', handleRevisionSubmit);
     
@@ -950,5 +978,6 @@ function initializeApp() {
         performanceReportWeekOffset = 0;
         loadInitialData();
     });
+    // Panggil loadInitialData setelah filter di-setup dan nilai awalnya ditetapkan
     loadInitialData();
 }
