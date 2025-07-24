@@ -6,7 +6,6 @@
     <title>Management Dashboard - KPI Sales</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- [TAMBAHAN] Library untuk membuat file ZIP -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-20); margin-bottom: var(--space-32); }
@@ -102,7 +101,6 @@
                 <div id="mainDashboard" class="content-page active">
                     <div class="page-header">
                         <h2>Ringkasan Kinerja Tim</h2>
-                        <!-- [TAMBAHAN] Tombol untuk download data -->
                         <button id="exportDataBtn" class="btn btn--secondary">Download Laporan CSV</button>
                     </div>
                     <div class="stats-grid">
@@ -115,7 +113,15 @@
                     <div class="dashboard-layout">
                         <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales (Berdasarkan Data Approved)</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
                         <div class="card">
-                            <div class="card__header"><h3>Laporan Kinerja Rinci per Sales</h3></div>
+                            <!-- [REVISI] Menambahkan navigasi carousel -->
+                            <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3>Laporan Kinerja Rinci per Sales</h3>
+                                <div id="managementReportNav" class="carousel-nav">
+                                    <button id="managementPrevWeekBtn" class="btn btn--outline btn--sm">&lt;</button>
+                                    <span id="managementWeekRangeLabel" style="display: inline-block; width: 130px; text-align: center; font-size: var(--font-size-sm); font-weight: 500;"></span>
+                                    <button id="managementNextWeekBtn" class="btn btn--outline btn--sm">&gt;</button>
+                                </div>
+                            </div>
                             <div class="card__body">
                                 <div id="performanceReportContainer" class="performance-report-container">
                                     <div id="tabsContainer" class="tabs-container"></div>
@@ -132,12 +138,8 @@
                         <h2>Pusat Validasi Data</h2>
                         <button id="refreshValidationBtn" class="btn btn--secondary">Refresh Data</button>
                     </div>
-                    <div id="validationTabsContainer" class="tabs-container validation-tabs">
-                        <!-- Tab buttons akan dibuat oleh JavaScript -->
-                    </div>
-                    <div id="validationTabContentContainer">
-                        <!-- Tab content akan dibuat oleh JavaScript -->
-                    </div>
+                    <div id="validationTabsContainer" class="tabs-container validation-tabs"></div>
+                    <div id="validationTabContentContainer"></div>
                 </div>
 
                 <!-- Halaman 3: Pengaturan Hari Libur & Izin -->
@@ -186,25 +188,15 @@
                 <h3 id="managementDetailModalTitle">Detail Data</h3>
                 <button class="close-button" onclick="closeDetailModal()">&times;</button>
             </div>
-            <div id="managementDetailModalBody">
-                <!-- Detail content will be injected here by JavaScript -->
-            </div>
+            <div id="managementDetailModalBody"></div>
         </div>
     </div>
     
-    <!-- ====================================================== -->
-    <!--          SKRIP FIREBASE - MULAI DARI SINI            -->
-    <!-- ====================================================== -->
-
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
-
-    <!-- Skrip Inisialisasi Firebase -->
     <script>
-      // Konfigurasi yang BENAR dari Firebase Console
       const firebaseConfig = {
         apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
         authDomain: "admin-stayvie.firebaseapp.com",
@@ -213,20 +205,13 @@
         messagingSenderId: "263821398757",
         appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
       };
-
-      // Inisialisasi Firebase
       if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
       }
-      const db = firebase.firestore(); // Inisialisasi Firestore
-      const auth = firebase.auth();     // Inisialisasi Firebase Auth
-      const storage = firebase.storage(); // Inisialisasi Firebase Storage
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+      const storage = firebase.storage();
     </script>
-
-    <!-- ====================================================== -->
-    <!--           SKRIP FIREBASE - SELESAI DI SINI             -->
-    <!-- ====================================================== -->
-
     <script src="utils.js"></script>
     <script src="management.js"></script>
 </body>
