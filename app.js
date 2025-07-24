@@ -1,21 +1,19 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.5 - Ensure full script integrity.
+ * @version 9.0.8 - Modified deal collection logic to include 'package' in 'VenueBookings'.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 let currentUser;
 auth.onAuthStateChanged(user => {
     if (user) {
-        // Coba ambil dari localStorage dulu untuk loading lebih cepat
         const userJSON = localStorage.getItem('currentUser');
         if (userJSON) {
             currentUser = JSON.parse(userJSON);
-            // Pastikan user di localStorage sesuai dengan yang login
             if (currentUser.uid === user.uid) {
                 initializeApp();
-            } else { // Jika tidak sesuai, fetch dari DB
+            } else {
                 fetchUserAndInitialize(user);
             }
         } else {
@@ -33,7 +31,6 @@ function fetchUserAndInitialize(user) {
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             initializeApp();
         } else {
-            // Jika data user tidak ditemukan, logout
             showMessage('Data pengguna tidak ditemukan di database.', 'error');
             auth.signOut();
         }
@@ -121,7 +118,6 @@ async function loadInitialData() {
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
     
-    // Inisialisasi struktur data
     currentData = { settings: {}, kpiSettings: {}, timeOff: [] };
     Object.keys(CONFIG.dataMapping).forEach(key => {
         currentData[key] = [];
@@ -130,14 +126,10 @@ async function loadInitialData() {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [FIXED] Menggunakan query yang efisien dengan filter tanggal di server.
-        // INI MEMBUTUHKAN INDEX COMPOSITE DI FIRESTORE: (sales, ascending) dan (timestamp, ascending/descending)
         const fetchPromises = collectionsToFetch.map(dataKey => {
             const collectionName = CONFIG.dataMapping[dataKey].sheetName;
             return db.collection(collectionName)
               .where('sales', '==', currentUser.name)
-              .where('timestamp', '>=', periodStartDate.toISOString())
-              .where('timestamp', '<=', periodEndDate.toISOString())
               .get();
         });
 
@@ -149,15 +141,18 @@ async function loadInitialData() {
         const allPromises = [...fetchPromises, ...settingsPromises];
         const results = await Promise.all(allPromises);
 
-        // Memproses data KPI
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const dataKey = collectionsToFetch[index];
             if (currentData[dataKey]) {
-                currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                currentData[dataKey] = allDocs.filter(item => {
+                    if (!item.timestamp) return false;
+                    const itemDate = new Date(item.timestamp);
+                    return itemDate >= periodStartDate && itemDate <= periodEndDate;
+                });
             }
         });
         
-        // Memproses data pengaturan
         const kpiSettingsDoc = results[results.length - 2];
         if (kpiSettingsDoc.exists) {
             currentData.kpiSettings = kpiSettingsDoc.data();
@@ -173,11 +168,7 @@ async function loadInitialData() {
         updateAllUI();
 
     } catch (error) {
-        // Menampilkan pesan error yang lebih informatif
         let errorMessage = `Gagal memuat data awal: ${error.message}`;
-        if (error.code === 'failed-precondition') {
-            errorMessage = 'Gagal memuat data. Diperlukan indeks database. Silakan buka Console (F12), cari error, dan klik link untuk membuat indeks di Firebase.';
-        }
         showMessage(errorMessage, 'error');
         console.error("Load data error:", error);
     } finally {
@@ -217,9 +208,8 @@ async function handleFormSubmit(e) {
         }
 
         data.sales = currentUser.name;
-        // [MODIFIED] Menggunakan ISOString untuk konsistensi query tanggal
         data.timestamp = new Date().toISOString(); 
-        data.datestamp = getDatestamp(); // Tetap simpan untuk display
+        data.datestamp = getDatestamp();
         data.validationStatus = 'Pending';
         data.validationNotes = '';
         
@@ -231,7 +221,6 @@ async function handleFormSubmit(e) {
         await db.collection(collectionName).add(data);
         
         showMessage('Data berhasil disimpan!', 'success');
-        // Muat ulang data setelah submit berhasil
         await loadInitialData();
         form.reset();
         
@@ -246,6 +235,20 @@ async function handleFormSubmit(e) {
     }
 }
 
+// [REVISED] Helper function to determine the correct "Deal" collection based on product type.
+function getDealCollectionName(product) {
+    const productLower = product.toLowerCase();
+    if (productLower.includes('b2b')) {
+        return 'B2BBookings';
+    } else if (productLower.includes('venue') || productLower.includes('package')) { // Logic updated here
+        return 'VenueBookings';
+    }
+    // Default or other deal types can be handled here
+    return 'Deal Lainnya';
+}
+
+
+// [REVISED] This function now copies and updates data, preserving history.
 async function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
@@ -262,20 +265,64 @@ async function handleUpdateLead(e) {
 
         if (!leadData) throw new Error('Data asli tidak ditemukan!');
 
-        const updateData = {
-            status: newStatus,
-            statusLog: (leadData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi ${newStatus}. Catatan: ${notes}`
-        };
+        const sourceCollectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
+        const originalDocRef = db.collection(sourceCollectionName).doc(leadId);
+        
+        // --- SCENARIO 1: Lead becomes a Prospect ---
+        if (sourceCollectionName === 'Leads' && newStatus === 'Prospect') {
+            const originalDoc = await originalDocRef.get();
+            if (!originalDoc.exists) throw new Error("Dokumen Lead asli tidak ditemukan di database.");
 
-        const proofInput = form.querySelector('#modalProofOfDeal');
-        if (newStatus === 'Deal' && proofInput && proofInput.files.length > 0) {
-            updateData.proofOfDeal = await uploadFile(proofInput.files[0], 'proofsOfDeal/');
-        } else if (newStatus === 'Deal' && !leadData.proofOfDeal) {
-            throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
+            // 1. Create new data for the 'Prospects' collection
+            const newData = { ...originalDoc.data() };
+            newData.status = 'Prospect';
+            newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Prospect. Catatan: ${notes}`;
+            
+            // 2. Add the new document to the 'Prospects' collection
+            await db.collection('Prospects').add(newData);
+
+            // 3. Update the original document in 'Leads' instead of deleting it
+            await originalDocRef.update({
+                status: 'Prospect',
+                statusLog: newData.statusLog
+            });
+
+        // --- SCENARIO 2: Lead or Prospect becomes a Deal ---
+        } else if (newStatus === 'Deal') {
+            const originalDoc = await originalDocRef.get();
+            if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
+
+            const dealCollectionName = getDealCollectionName(leadData.product);
+            
+            // 1. Create new data for the appropriate "Deal" collection
+            const newData = { ...originalDoc.data() };
+            newData.status = 'Deal';
+            newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Deal. Catatan: ${notes}`;
+            
+            const proofInput = form.querySelector('#modalProofOfDeal');
+            if (proofInput && proofInput.files.length > 0) {
+                newData.proofOfDeal = await uploadFile(proofInput.files[0], 'proofsOfDeal/');
+            } else if (!leadData.proofOfDeal) {
+                throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
+            }
+
+            // 2. Add the new document to the "Deal" collection
+            await db.collection(dealCollectionName).add(newData);
+
+            // 3. Update the original document in its source collection
+            await originalDocRef.update({
+                status: 'Deal',
+                statusLog: newData.statusLog
+            });
+
+        // --- SCENARIO 3: Any other status update (e.g., to "Lost") ---
+        } else {
+            const updatedLog = (leadData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi ${newStatus}. Catatan: ${notes}`;
+            await originalDocRef.update({
+                status: newStatus,
+                statusLog: updatedLog
+            });
         }
-
-        const collectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
-        await db.collection(collectionName).doc(leadId).update(updateData);
 
         showMessage('Status berhasil diperbarui!', 'success');
         await loadInitialData();
@@ -283,10 +330,12 @@ async function handleUpdateLead(e) {
 
     } catch (error) {
         showMessage(`Gagal memperbarui status: ${error.message}`, 'error');
+        console.error("Update Lead Error:", error);
     } finally {
         button.disabled = false;
     }
 }
+
 
 async function handleRevisionSubmit(e) {
     e.preventDefault();
@@ -359,14 +408,13 @@ function calculateProgressForAllStatuses(dataKey, startDate, endDate) {
     if (!Array.isArray(data)) return 0;
     return data.filter(item => {
         if (!item || !(item.timestamp || item.datestamp)) return false;
-        // Menggunakan timestamp (ISO string) untuk perbandingan yang andal
         const itemDate = new Date(item.timestamp); 
         return itemDate && itemDate >= startDate && itemDate <= endDate;
     }).length;
 }
 
 function updateDashboard() {
-    if (!currentUser || !currentData.kpiSettings) return; // Guard clause
+    if (!currentUser || !currentData.kpiSettings) return;
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const kpiSettings = currentData.kpiSettings || {};
 
@@ -655,7 +703,9 @@ function updateLeadTabs() {
     const allLeads = currentData.leads || [];
     const allProspects = currentData.prospects || [];
     
+    // The "Lead" tab should ONLY show items with status "Lead".
     const leads = allLeads.filter(item => item && item.status === 'Lead');
+    // The "Prospect" tab shows everything from the "Prospects" collection.
     const prospects = allProspects;
 
     renderLeadTable(leadContainer, leads, 'leads');
@@ -979,5 +1029,4 @@ function initializeApp() {
         loadInitialData();
     });
     // Panggil loadInitialData setelah filter di-setup dan nilai awalnya ditetapkan
-    loadInitialData();
-}
+    loadInitialData()
