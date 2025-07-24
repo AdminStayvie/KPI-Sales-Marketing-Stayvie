@@ -1,12 +1,11 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.14 - Implemented real-time data synchronization using onSnapshot.
+ * @version 9.0.15 - Added (non aktif) label for disabled KPIs in the sidebar menu.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 let currentUser;
-// [REVISI] Variabel untuk menyimpan fungsi unsubscribe dari listener
 let unsubscribeListeners = [];
 
 auth.onAuthStateChanged(user => {
@@ -23,7 +22,6 @@ auth.onAuthStateChanged(user => {
             fetchUserAndInitialize(user);
         }
     } else {
-        // Hentikan semua listener saat logout
         unsubscribeListeners.forEach(unsubscribe => unsubscribe());
         unsubscribeListeners = [];
         window.location.href = 'index.html';
@@ -53,24 +51,24 @@ function fetchUserAndInitialize(user) {
 const CONFIG = {
     targets: {
         daily: [
-            { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads' },
-            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects' },
-            { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi' }
+            { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads', page: 'input-lead' },
+            { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects', page: 'input-lead' },
+            { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi', page: 'upload-promosi' }
         ],
         weekly: [
-            { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing' },
-            { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor' },
-            { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations' },
-            { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys' },
-            { id: 8, name: "Laporan Ringkas Mingguan", target: 1, penalty: 50000, dataKey: 'reports' },
-            { id: 9, name: "Input CRM Survey kompetitor", target: 1, penalty: 25000, dataKey: 'crmSurveys' },
-            { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions' }
+            { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing', page: 'upload-canvasing' },
+            { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor', page: 'door-to-door' },
+            { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations', page: 'quotation' },
+            { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys', page: 'survey-coliving' },
+            { id: 8, name: "Laporan Ringkas Mingguan", target: 1, penalty: 50000, dataKey: 'reports', page: 'laporan-mingguan' },
+            { id: 9, name: "Input CRM Survey kompetitor", target: 1, penalty: 25000, dataKey: 'crmSurveys', page: 'crm-survey' },
+            { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions', page: 'konversi-venue' }
         ],
         monthly: [
-            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings' },
-            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings' },
-            { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events' },
-            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns' }
+            { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings', page: 'input-lead' },
+            { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings', page: 'input-lead' },
+            { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events', page: 'event-networking' },
+            { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns', page: 'launch-campaign' }
         ]
     },
     dataMapping: {
@@ -115,9 +113,7 @@ async function uploadFile(file, path) {
     return await fileRef.getDownloadURL();
 }
 
-// [REVISI] Menggunakan onSnapshot untuk real-time updates
 function setupRealtimeListeners() {
-    // Hentikan listener lama jika ada
     unsubscribeListeners.forEach(unsubscribe => unsubscribe());
     unsubscribeListeners = [];
 
@@ -138,7 +134,7 @@ function setupRealtimeListeners() {
 
         const unsubscribe = query.onSnapshot(snapshot => {
             currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            updateAllUI(); // Perbarui UI setiap kali ada perubahan
+            updateAllUI();
             document.body.style.cursor = 'default';
         }, error => {
             let errorMessage = `Gagal memuat data ${collectionName}: ${error.message}`;
@@ -152,7 +148,6 @@ function setupRealtimeListeners() {
         unsubscribeListeners.push(unsubscribe);
     });
 
-    // Listener untuk settings (biasanya tidak sering berubah, jadi .get() masih oke, tapi onSnapshot lebih konsisten)
     const settingsUnsubscribe = db.collection('settings').onSnapshot(snapshot => {
         snapshot.forEach(doc => {
             if (doc.id === 'kpi') {
@@ -162,6 +157,8 @@ function setupRealtimeListeners() {
             }
         });
         updateAllUI();
+        // [BARU] Panggil fungsi untuk update menu sidebar setiap kali settings berubah
+        updateSidebarMenuState(); 
     });
     unsubscribeListeners.push(settingsUnsubscribe);
 }
@@ -211,7 +208,6 @@ async function handleFormSubmit(e) {
         await db.collection(collectionName).add(data);
         
         showMessage('Data berhasil disimpan!', 'success');
-        // Tidak perlu panggil loadInitialData() lagi, onSnapshot akan handle
         form.reset();
         
     } catch (error) {
@@ -306,7 +302,6 @@ async function handleUpdateLead(e) {
         }
 
         showMessage('Status berhasil diperbarui!', 'success');
-        // Tidak perlu panggil loadInitialData() lagi
         closeModal();
 
     } catch (error) {
@@ -363,7 +358,6 @@ async function handleRevisionSubmit(e) {
         await originalDocRef.update(dataToUpdate);
 
         showMessage('Data revisi berhasil dikirim!', 'success');
-        // Tidak perlu panggil loadInitialData() lagi
         closeModal();
 
     } catch (error) {
@@ -378,6 +372,50 @@ async function handleRevisionSubmit(e) {
 // FUNGSI UI & PERHITUNGAN
 // =================================================================================
 
+// [BARU] Fungsi untuk update tampilan menu sidebar
+function updateSidebarMenuState() {
+    const kpiSettings = currentData.kpiSettings || {};
+    const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
+
+    // Buat map dari page ke target ID
+    const pageToTargetId = {};
+    allTargets.forEach(target => {
+        if (!pageToTargetId[target.page]) {
+            pageToTargetId[target.page] = [];
+        }
+        pageToTargetId[target.page].push(target.id);
+    });
+
+    document.querySelectorAll('.nav-link[data-page]').forEach(link => {
+        const page = link.dataset.page;
+        if (pageToTargetId[page]) {
+            // Cek apakah SEMUA target yang berhubungan dengan halaman ini non-aktif
+            const allTargetsForPageDisabled = pageToTargetId[page].every(id => kpiSettings[id] === false);
+
+            const existingSpan = link.querySelector('.inactive-span');
+            if (allTargetsForPageDisabled) {
+                if (!existingSpan) {
+                    const span = document.createElement('span');
+                    span.textContent = ' (non aktif)';
+                    span.className = 'inactive-span';
+                    span.style.opacity = '0.6';
+                    span.style.fontSize = '0.9em';
+                    link.appendChild(span);
+                }
+                link.style.pointerEvents = 'none';
+                link.style.opacity = '0.5';
+            } else {
+                if (existingSpan) {
+                    existingSpan.remove();
+                }
+                link.style.pointerEvents = 'auto';
+                link.style.opacity = '1';
+            }
+        }
+    });
+}
+
+
 function updateAllUI() {
     try {
         updateDashboard();
@@ -385,6 +423,7 @@ function updateAllUI() {
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
         renderPerformanceReport();
+        updateSidebarMenuState(); // Panggil juga di sini untuk memastikan konsistensi
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
@@ -1024,9 +1063,7 @@ function initializeApp() {
     setupEventListeners();
     setupFilters(() => {
         performanceReportWeekOffset = 0;
-        // [REVISI] Panggil setupRealtimeListeners, bukan loadInitialData
         setupRealtimeListeners();
     });
-    // Panggil setupRealtimeListeners saat aplikasi pertama kali dimuat
     setupRealtimeListeners();
 }
