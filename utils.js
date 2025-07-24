@@ -1,7 +1,7 @@
 /**
  * @file utils.js
  * @description Berisi fungsi-fungsi utilitas yang digunakan bersama di seluruh aplikasi KPI.
- * @version 1.0.0
+ * @version 1.1.0 - Added robust date parsing
  */
 
 // =================================================================================
@@ -34,6 +34,40 @@ function formatDate(dateStr) {
 // =================================================================================
 
 /**
+ * [NEW] Mem-parsing string tanggal kustom (e.g., "24/07/2025 11.09") menjadi objek Date.
+ * Juga menangani format ISO standar untuk data baru.
+ * @param {string} dateString - String tanggal yang akan di-parse.
+ * @returns {Date|null} Objek Date atau null jika format tidak valid.
+ */
+function parseCustomDate(dateString) {
+    if (!dateString || typeof dateString !== 'string') return null;
+
+    // Coba parsing format ISO terlebih dahulu (untuk data baru yang disimpan aplikasi)
+    const isoDate = new Date(dateString);
+    if (!isNaN(isoDate.getTime()) && dateString.includes('T')) {
+        return isoDate;
+    }
+
+    // Coba parsing format kustom "dd/MM/yyyy HH.mm" atau "dd/MM/yyyy HH:mm" dari data impor
+    const parts = dateString.match(/(\d{2})\/(\d{2})\/(\d{4}).*(\d{2})[:.](\d{2})/);
+    if (parts) {
+        // parts[1] = day, parts[2] = month, parts[3] = year, parts[4] = hour, parts[5] = minute
+        const day = parseInt(parts[1], 10);
+        const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed in JS
+        const year = parseInt(parts[3], 10);
+        const hour = parseInt(parts[4], 10);
+        const minute = parseInt(parts[5], 10);
+        const date = new Date(year, month, day, hour, minute);
+        if (!isNaN(date.getTime())) {
+            return date;
+        }
+    }
+
+    return null; // Return null jika tidak ada format yang cocok
+}
+
+
+/**
  * Mendapatkan tanggal awal minggu (Senin) dari tanggal yang diberikan.
  * @param {Date} [date=new Date()] - Tanggal referensi.
  * @returns {Date} Objek Date yang merupakan hari Senin dari minggu tersebut.
@@ -60,25 +94,6 @@ function toLocalDateString(date) {
 }
 
 /**
- * Mendapatkan timestamp lokal dalam format ISO 8601.
- * @returns {string} Timestamp string.
- */
-function getLocalTimestampString() {
-    const now = new Date();
-    const tzo = -now.getTimezoneOffset(),
-        dif = tzo >= 0 ? '+' : '-',
-        pad = num => (num < 10 ? '0' : '') + num;
-    return now.getFullYear() + '-' +
-        pad(now.getMonth() + 1) + '-' +
-        pad(now.getDate()) + 'T' +
-        pad(now.getHours()) + ':' +
-        pad(now.getMinutes()) + ':' +
-        pad(now.getSeconds()) +
-        dif + pad(Math.floor(Math.abs(tzo) / 60)) + ':' +
-        pad(Math.abs(tzo) % 60);
-}
-
-/**
  * Mendapatkan tanggal dan waktu saat ini dalam format lokal (id-ID).
  * @returns {string} String tanggal dan waktu yang diformat.
  */
@@ -89,7 +104,7 @@ function getDatestamp() {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
-    });
+    }).replace(/\./g, ':'); // Ganti titik dengan titik dua agar konsisten
 }
 
 
@@ -103,24 +118,32 @@ function getDatestamp() {
  * @param {string} [type='info'] - Jenis pesan ('info', 'success', 'error').
  */
 function showMessage(message, type = 'info') {
-    // Hapus pesan lama jika ada
-    const oldMessage = document.querySelector('.message');
+    const oldMessage = document.querySelector('.app-message');
     if(oldMessage) oldMessage.remove();
 
     const notification = document.createElement('div');
-    notification.className = `message ${type}`;
+    notification.className = `app-message message ${type}`;
     notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed; top: 80px; right: 20px; z-index: 2000;
+        padding: 12px 20px; border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        opacity: 0; transform: translateX(20px);
+        transition: opacity 300ms ease, transform 300ms ease;
+    `;
 
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.insertBefore(notification, mainContent.firstChild);
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            setTimeout(() => notification.remove(), 500);
-        }, 4000);
-    } else {
-        console.log(`Message (${type}): ${message}`);
-    }
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateX(0)';
+    }, 10);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(20px)';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
 }
 
 
@@ -147,6 +170,7 @@ function updateDateTime() {
  */
 function logout() {
     localStorage.removeItem('currentUser');
+    auth.signOut();
     window.location.href = 'index.html';
 }
 
@@ -154,7 +178,6 @@ function logout() {
 // FUNGSI FILTER PERIODE
 // =================================================================================
 
-// Variabel global untuk menyimpan state filter
 let selectedYear, selectedPeriod;
 
 /**
@@ -167,7 +190,6 @@ function setupFilters(onFilterChange) {
     if (!yearFilter || !periodFilter) return;
 
     const currentYear = new Date().getFullYear();
-    // Isi opsi tahun
     for (let i = currentYear; i >= currentYear - 2; i--) {
         const option = document.createElement('option');
         option.value = i;
@@ -176,9 +198,8 @@ function setupFilters(onFilterChange) {
     }
     selectedYear = yearFilter.value;
 
-    generatePeriodOptions(periodFilter); // Panggil untuk pertama kali
+    generatePeriodOptions(periodFilter);
 
-    // Tambahkan event listener
     yearFilter.addEventListener('change', (e) => {
         selectedYear = e.target.value;
         generatePeriodOptions(periodFilter);
@@ -213,12 +234,10 @@ function generatePeriodOptions(periodFilter) {
         periodFilter.appendChild(option);
     }
 
-    // Set periode default berdasarkan tanggal hari ini
     const now = new Date();
     const currentDay = now.getDate();
     let currentMonthIndex = now.getMonth();
 
-    // Jika tanggal sebelum tanggal 21, periode dihitung sebagai bulan sebelumnya.
     if (currentDay < 21) {
         currentMonthIndex = (currentMonthIndex - 1 + 12) % 12;
     }
@@ -245,10 +264,9 @@ function getPeriodStartDate() {
 function getPeriodEndDate() {
     if (!selectedYear || !selectedPeriod) return new Date();
     const [startMonthIndex, endMonthIndex] = selectedPeriod.split('-').map(Number);
-    // Jika periode melintasi tahun (misal: Des - Jan), tambahkan tahun pada bulan akhir.
     const endYear = startMonthIndex > endMonthIndex ? Number(selectedYear) + 1 : selectedYear;
     const endDate = new Date(endYear, endMonthIndex, 20);
-    endDate.setHours(23, 59, 59, 999); // Set ke akhir hari
+    endDate.setHours(23, 59, 59, 999);
     return endDate;
 }
 
