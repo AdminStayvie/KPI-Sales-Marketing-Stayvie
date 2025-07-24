@@ -126,9 +126,6 @@ async function loadInitialData() {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [REVERTED] Using efficient server-side filtering.
-        // THIS REQUIRES A COMPOSITE INDEX IN FIRESTORE.
-        // If this fails, the console will show an error with a link to create the index.
         const fetchPromises = collectionsToFetch.map(dataKey => {
             const collectionName = CONFIG.dataMapping[dataKey].sheetName;
             return db.collection(collectionName)
@@ -169,7 +166,6 @@ async function loadInitialData() {
 
     } catch (error) {
         let errorMessage = `Gagal memuat data awal: ${error.message}`;
-        // Provide specific instructions if the error is a missing index.
         if (error.code === 'failed-precondition') {
             errorMessage = 'Gagal memuat data karena indeks database tidak ada. Buka Console (F12), cari pesan error, lalu klik link yang diberikan untuk membuat indeks secara otomatis di Firebase. Setelah indeks selesai dibuat (beberapa menit), refresh halaman ini.';
         }
@@ -239,21 +235,16 @@ async function handleFormSubmit(e) {
     }
 }
 
-// [REVISED] Helper function to determine the correct "Deal" collection based on product type.
 function getDealCollectionName(product) {
     const productLower = product.toLowerCase();
-    // Use a more specific check for B2B
     if (product === 'Kamar Hotel B2B') {
         return 'B2BBookings';
     } else if (productLower.includes('venue') || productLower.includes('package')) {
         return 'VenueBookings';
     }
-    // Default or other deal types can be handled here
     return 'Deal Lainnya';
 }
 
-
-// [REVISED] This function now copies and updates data, preserving history.
 async function handleUpdateLead(e) {
     e.preventDefault();
     const form = e.target;
@@ -273,33 +264,27 @@ async function handleUpdateLead(e) {
         const sourceCollectionName = leadData.status === 'Lead' ? 'Leads' : 'Prospects';
         const originalDocRef = db.collection(sourceCollectionName).doc(leadId);
         
-        // --- SCENARIO 1: Lead becomes a Prospect ---
         if (sourceCollectionName === 'Leads' && newStatus === 'Prospect') {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen Lead asli tidak ditemukan di database.");
 
-            // 1. Create new data for the 'Prospects' collection
             const newData = { ...originalDoc.data() };
             newData.status = 'Prospect';
             newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Prospect. Catatan: ${notes}`;
             
-            // 2. Add the new document to the 'Prospects' collection
             await db.collection('Prospects').add(newData);
 
-            // 3. Update the original document in 'Leads' instead of deleting it
             await originalDocRef.update({
                 status: 'Prospect',
                 statusLog: newData.statusLog
             });
 
-        // --- SCENARIO 2: Lead or Prospect becomes a Deal ---
         } else if (newStatus === 'Deal') {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
 
             const dealCollectionName = getDealCollectionName(leadData.product);
             
-            // 1. Create new data for the appropriate "Deal" collection
             const newData = { ...originalDoc.data() };
             newData.status = 'Deal';
             newData.statusLog = (newData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi Deal. Catatan: ${notes}`;
@@ -311,16 +296,13 @@ async function handleUpdateLead(e) {
                 throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
             }
 
-            // 2. Add the new document to the "Deal" collection
             await db.collection(dealCollectionName).add(newData);
 
-            // 3. Update the original document in its source collection
             await originalDocRef.update({
                 status: 'Deal',
                 statusLog: newData.statusLog
             });
 
-        // --- SCENARIO 3: Any other status update (e.g., to "Lost") ---
         } else {
             const updatedLog = (leadData.statusLog || '') + `\n${getDatestamp()}: Status diubah menjadi ${newStatus}. Catatan: ${notes}`;
             await originalDocRef.update({
@@ -1033,5 +1015,5 @@ function initializeApp() {
         performanceReportWeekOffset = 0;
         loadInitialData();
     });
-    // Panggil loadInitialData setelah filter di-setup dan nilai awalnya ditetapkan
-    loadInitialDat
+    loadInitialData();
+}
