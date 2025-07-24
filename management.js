@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.6 - Reverted to client-side date filtering to resolve unresponsiveness and data loading issues.
+ * @version 7.0.7 - Added CSV data export functionality.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -108,8 +108,6 @@ async function loadInitialData(isInitialLoad = false) {
     try {
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         
-        // [FIXED] Reverted to fetching all documents and filtering client-side.
-        // This is more robust against missing indexes or inconsistent date fields.
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName).get()
         );
@@ -127,9 +125,7 @@ async function loadInitialData(isInitialLoad = false) {
             const collectionName = collectionsToFetch[index];
             const allDocs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Perform date filtering on the client side.
             const filteredData = allDocs.filter(item => {
-                // Use 'timestamp' as the primary date field. Fallback can be added here if needed.
                 if (!item.timestamp) return false; 
                 try {
                     const itemDate = new Date(item.timestamp);
@@ -215,7 +211,6 @@ async function loadPendingEntries() {
     }
 }
 
-// [REVISED] Using a transaction for validation with a pre-check.
 async function handleValidation(buttonElement, sheetName, id, type) {
     let notes = '';
     if (type === 'reject') {
@@ -233,17 +228,14 @@ async function handleValidation(buttonElement, sheetName, id, type) {
     const docRef = db.collection(sheetName).doc(id);
 
     try {
-        // Pre-flight check to see if the document exists right before the transaction.
         const preCheckDoc = await docRef.get();
         if (!preCheckDoc.exists) {
             throw new Error("Dokumen tidak ditemukan saat pemeriksaan awal. Data mungkin sudah tidak valid. Silakan refresh.");
         }
 
-        // Proceed with the transaction.
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(docRef);
             if (!doc.exists) {
-                // This error means the doc was deleted between the pre-check and the transaction start.
                 throw new Error("Dokumen tidak ditemukan di dalam transaksi. Terjadi konflik, coba lagi.");
             }
 
@@ -255,7 +247,6 @@ async function handleValidation(buttonElement, sheetName, id, type) {
 
         showMessage('Validasi berhasil disimpan.', 'success');
         
-        // --- UI Update Logic ---
         const row = actionCell.parentElement;
         row.style.transition = 'opacity 0.5s ease';
         row.style.opacity = '0';
@@ -269,6 +260,102 @@ async function handleValidation(buttonElement, sheetName, id, type) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
         console.error("Validation failed:", error);
         actionCell.querySelectorAll('button').forEach(btn => btn.disabled = false);
+    }
+}
+
+
+// =================================================================================
+// FUNGSI EKSPOR DATA [BARU]
+// =================================================================================
+
+/**
+ * Mengubah array objek menjadi string CSV.
+ * @param {Array<Object>} dataArray Array data yang akan diubah.
+ * @returns {string} String dalam format CSV.
+ */
+function convertToCsv(dataArray) {
+    if (!dataArray || dataArray.length === 0) {
+        return "";
+    }
+
+    const headers = Object.keys(dataArray[0]);
+    const csvRows = [];
+    
+    // Tambahkan baris header
+    csvRows.push(headers.join(','));
+
+    // Tambahkan baris data
+    for (const row of dataArray) {
+        const values = headers.map(header => {
+            let cell = row[header] === null || row[header] === undefined ? '' : row[header];
+            
+            if (typeof cell === 'object') {
+                cell = JSON.stringify(cell);
+            } else {
+                cell = String(cell);
+            }
+
+            // Escape double quotes and handle commas
+            if (cell.includes('"') || cell.includes(',')) {
+                cell = `"${cell.replace(/"/g, '""')}"`;
+            }
+            return cell;
+        });
+        csvRows.push(values.join(','));
+    }
+
+    return csvRows.join('\n');
+}
+
+/**
+ * Mengekspor semua data yang ditampilkan sebagai file ZIP berisi CSV.
+ */
+async function exportAllDataAsZip() {
+    showMessage('Mempersiapkan file unduhan...', 'info');
+    const exportBtn = document.getElementById('exportDataBtn');
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Memproses...';
+
+    try {
+        const zip = new JSZip();
+        let fileCount = 0;
+
+        for (const collectionName in CONFIG.dataMapping) {
+            const dataKey = CONFIG.dataMapping[collectionName].dataKey;
+            const data = allData[dataKey];
+
+            if (data && data.length > 0) {
+                const csvContent = convertToCsv(data);
+                zip.file(`${collectionName}.csv`, csvContent);
+                fileCount++;
+            }
+        }
+
+        if (fileCount === 0) {
+            showMessage('Tidak ada data untuk diekspor pada periode ini.', 'warning');
+            return;
+        }
+
+        const zipContent = await zip.generateAsync({ type: 'blob' });
+        
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(zipContent);
+        const period = document.getElementById('periodFilter').options[document.getElementById('periodFilter').selectedIndex].text.replace(/\s/g, '');
+        const year = document.getElementById('yearFilter').value;
+        link.download = `LaporanKPI_${year}_${period}.zip`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showMessage('Unduhan berhasil disiapkan!', 'success');
+
+    } catch (error) {
+        showMessage(`Gagal mengekspor data: ${error.message}`, 'error');
+        console.error("Export Error:", error);
+    } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = 'Download Laporan CSV';
     }
 }
 
@@ -779,6 +866,8 @@ function initializeApp() {
         auth.signOut();
     });
     document.getElementById('refreshValidationBtn')?.addEventListener('click', loadPendingEntries);
+    // [TAMBAHAN] Event listener untuk tombol ekspor
+    document.getElementById('exportDataBtn')?.addEventListener('click', exportAllDataAsZip);
     updateDateTime();
     setInterval(updateDateTime, 60000);
     document.querySelectorAll('.nav-link').forEach(link => {
@@ -792,4 +881,3 @@ function initializeApp() {
     });
     loadInitialData(true);
 }
-```" in the immersive edit
