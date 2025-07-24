@@ -1,11 +1,14 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.13 - Fixed revision workflow: rejected leads now reappear correctly and revisionLog is now implemented.
+ * @version 9.0.14 - Implemented real-time data synchronization using onSnapshot.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
 let currentUser;
+// [REVISI] Variabel untuk menyimpan fungsi unsubscribe dari listener
+let unsubscribeListeners = [];
+
 auth.onAuthStateChanged(user => {
     if (user) {
         const userJSON = localStorage.getItem('currentUser');
@@ -20,6 +23,9 @@ auth.onAuthStateChanged(user => {
             fetchUserAndInitialize(user);
         }
     } else {
+        // Hentikan semua listener saat logout
+        unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+        unsubscribeListeners = [];
         window.location.href = 'index.html';
     }
 });
@@ -109,73 +115,57 @@ async function uploadFile(file, path) {
     return await fileRef.getDownloadURL();
 }
 
-async function loadInitialData() {
-    if (isFetchingData) return;
-    isFetchingData = true;
-    showMessage("Memuat data dari server...", "info");
+// [REVISI] Menggunakan onSnapshot untuk real-time updates
+function setupRealtimeListeners() {
+    // Hentikan listener lama jika ada
+    unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+    unsubscribeListeners = [];
+
+    showMessage("Menyambungkan ke server...", "info");
     document.body.style.cursor = 'wait';
 
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
+
+    const collectionsToFetch = Object.keys(CONFIG.dataMapping);
     
-    currentData = { settings: {}, kpiSettings: {}, timeOff: [] };
-    Object.keys(CONFIG.dataMapping).forEach(key => {
-        currentData[key] = [];
+    collectionsToFetch.forEach(dataKey => {
+        const collectionName = CONFIG.dataMapping[dataKey].sheetName;
+        const query = db.collection(collectionName)
+            .where('sales', '==', currentUser.name)
+            .where('timestamp', '>=', periodStartDate.toISOString())
+            .where('timestamp', '<=', periodEndDate.toISOString());
+
+        const unsubscribe = query.onSnapshot(snapshot => {
+            currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            updateAllUI(); // Perbarui UI setiap kali ada perubahan
+            document.body.style.cursor = 'default';
+        }, error => {
+            let errorMessage = `Gagal memuat data ${collectionName}: ${error.message}`;
+            if (error.code === 'failed-precondition') {
+                errorMessage = `Gagal memuat data karena indeks database tidak ada. Buka Console (F12), cari pesan error, lalu klik link yang diberikan untuk membuat indeks secara otomatis di Firebase. Setelah indeks selesai dibuat (beberapa menit), refresh halaman ini.`;
+            }
+            showMessage(errorMessage, 'error');
+            console.error(`Listen error for ${collectionName}:`, error);
+            document.body.style.cursor = 'default';
+        });
+        unsubscribeListeners.push(unsubscribe);
     });
 
-    try {
-        const collectionsToFetch = Object.keys(CONFIG.dataMapping);
-        
-        const fetchPromises = collectionsToFetch.map(dataKey => {
-            const collectionName = CONFIG.dataMapping[dataKey].sheetName;
-            return db.collection(collectionName)
-              .where('sales', '==', currentUser.name)
-              .where('timestamp', '>=', periodStartDate.toISOString())
-              .where('timestamp', '<=', periodEndDate.toISOString())
-              .get();
-        });
-
-        const settingsPromises = [
-            db.collection('settings').doc('kpi').get(),
-            db.collection('settings').doc('timeOff').get()
-        ];
-        
-        const allPromises = [...fetchPromises, ...settingsPromises];
-        const results = await Promise.all(allPromises);
-
-        results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
-            const dataKey = collectionsToFetch[index];
-            if (currentData[dataKey]) {
-                currentData[dataKey] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Listener untuk settings (biasanya tidak sering berubah, jadi .get() masih oke, tapi onSnapshot lebih konsisten)
+    const settingsUnsubscribe = db.collection('settings').onSnapshot(snapshot => {
+        snapshot.forEach(doc => {
+            if (doc.id === 'kpi') {
+                currentData.kpiSettings = doc.data();
+            } else if (doc.id === 'timeOff') {
+                currentData.timeOff = doc.data().entries || [];
             }
         });
-        
-        const kpiSettingsDoc = results[results.length - 2];
-        if (kpiSettingsDoc.exists) {
-            currentData.kpiSettings = kpiSettingsDoc.data();
-        }
-
-        const timeOffDoc = results[results.length - 1];
-        if (timeOffDoc.exists) {
-            currentData.timeOff = timeOffDoc.data().entries || [];
-        }
-
-        showMessage("Data berhasil dimuat.", "success");
-        performanceReportWeekOffset = 0;
         updateAllUI();
-
-    } catch (error) {
-        let errorMessage = `Gagal memuat data awal: ${error.message}`;
-        if (error.code === 'failed-precondition') {
-            errorMessage = 'Gagal memuat data karena indeks database tidak ada. Buka Console (F12), cari pesan error, lalu klik link yang diberikan untuk membuat indeks secara otomatis di Firebase. Setelah indeks selesai dibuat (beberapa menit), refresh halaman ini.';
-        }
-        showMessage(errorMessage, 'error');
-        console.error("Load data error:", error);
-    } finally {
-        isFetchingData = false;
-        document.body.style.cursor = 'default';
-    }
+    });
+    unsubscribeListeners.push(settingsUnsubscribe);
 }
+
 
 async function handleFormSubmit(e) {
     e.preventDefault();
@@ -221,7 +211,7 @@ async function handleFormSubmit(e) {
         await db.collection(collectionName).add(data);
         
         showMessage('Data berhasil disimpan!', 'success');
-        await loadInitialData();
+        // Tidak perlu panggil loadInitialData() lagi, onSnapshot akan handle
         form.reset();
         
     } catch (error) {
@@ -316,7 +306,7 @@ async function handleUpdateLead(e) {
         }
 
         showMessage('Status berhasil diperbarui!', 'success');
-        await loadInitialData();
+        // Tidak perlu panggil loadInitialData() lagi
         closeModal();
 
     } catch (error) {
@@ -328,7 +318,6 @@ async function handleUpdateLead(e) {
 }
 
 
-// [REVISED] This function now adds a revisionLog entry.
 async function handleRevisionSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -340,7 +329,6 @@ async function handleRevisionSubmit(e) {
     button.disabled = true;
 
     try {
-        // First, get the original document to access its revisionLog
         const originalDocRef = db.collection(collectionName).doc(id);
         const originalDoc = await originalDocRef.get();
         if (!originalDoc.exists) {
@@ -363,7 +351,6 @@ async function handleRevisionSubmit(e) {
         dataToUpdate.validationStatus = 'Pending';
         dataToUpdate.validationNotes = '';
         
-        // Add to the revisionLog
         const revisionEntry = `${getDatestamp()}: Data direvisi oleh ${currentUser.name}.`;
         dataToUpdate.revisionLog = originalData.revisionLog ? `${originalData.revisionLog}\n${revisionEntry}` : revisionEntry;
         
@@ -376,7 +363,7 @@ async function handleRevisionSubmit(e) {
         await originalDocRef.update(dataToUpdate);
 
         showMessage('Data revisi berhasil dikirim!', 'success');
-        await loadInitialData();
+        // Tidak perlu panggil loadInitialData() lagi
         closeModal();
 
     } catch (error) {
@@ -705,7 +692,6 @@ function updateSimpleSummaryTable(dataKey, mapping, container) {
     container.innerHTML = tableHTML;
 }
 
-// [REVISED] This function now shows rejected leads in the "Lead" tab.
 function updateLeadTabs() {
     const leadContainer = document.getElementById('leadContent');
     const prospectContainer = document.getElementById('prospectContent');
@@ -715,9 +701,7 @@ function updateLeadTabs() {
     const allLeads = currentData.leads || [];
     const allProspects = currentData.prospects || [];
     
-    // The "Lead" tab now shows items that are either status "Lead" OR have been rejected.
     const leads = allLeads.filter(item => item && (item.status === 'Lead' || item.validationStatus === 'Rejected'));
-    // The "Prospect" tab shows everything from the "Prospects" collection.
     const prospects = allProspects.filter(item => item && item.validationStatus !== 'Rejected');
     const rejectedProspects = allProspects.filter(item => item && item.validationStatus === 'Rejected');
 
@@ -1040,7 +1024,9 @@ function initializeApp() {
     setupEventListeners();
     setupFilters(() => {
         performanceReportWeekOffset = 0;
-        loadInitialData();
+        // [REVISI] Panggil setupRealtimeListeners, bukan loadInitialData
+        setupRealtimeListeners();
     });
-    loadInitialData();
+    // Panggil setupRealtimeListeners saat aplikasi pertama kali dimuat
+    setupRealtimeListeners();
 }
