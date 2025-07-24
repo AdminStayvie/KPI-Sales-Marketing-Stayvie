@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.0 - Firebase Integration
+ * @version 9.0.1 - Firebase Integration Case Fix
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -14,7 +14,8 @@ auth.onAuthStateChanged(user => {
             initializeApp();
         } else {
             // Jika data tidak ada di localStorage, ambil dari Firestore
-            db.collection('users').doc(user.uid).get().then(doc => {
+            // [FIXED] Mengubah 'users' menjadi 'Users'
+            db.collection('Users').doc(user.uid).get().then(doc => {
                 if (doc.exists) {
                     currentUser = { uid: user.uid, email: user.email, ...doc.data() };
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
