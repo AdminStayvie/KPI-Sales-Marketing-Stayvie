@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.1 - Firebase Integration Case Fix
+ * @version 7.0.2 - Bug Fix for Data Loading
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -19,7 +19,6 @@ auth.onAuthStateChanged(user => {
             currentUser = parsedUser;
             initializeApp();
         } else {
-            // [FIXED] Mengubah 'users' menjadi 'Users'
             db.collection('Users').doc(user.uid).get().then(doc => {
                 if (doc.exists && doc.data().role === 'management') {
                     currentUser = { uid: user.uid, email: user.email, ...doc.data() };
@@ -37,7 +36,7 @@ auth.onAuthStateChanged(user => {
 });
 
 // =================================================================================
-// KONFIGURASI (SAMA SEPERTI ASLINYA)
+// KONFIGURASI
 // =================================================================================
 const CONFIG = {
     dataMapping: {
@@ -59,12 +58,29 @@ const CONFIG = {
     }
 };
 
+// [FIXED] Konfigurasi target KPI dibuat lengkap
 const TARGET_CONFIG = {
-    daily: [ { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads' }, /* ...sisanya sama... */ ],
-    weekly: [ { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing' }, /* ...sisanya sama... */ ],
-    monthly: [ { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings' }, /* ...sisanya sama... */ ]
+    daily: [
+        { id: 1, name: "Menginput Data Lead", target: 20, penalty: 15000, dataKey: 'leads' },
+        { id: 2, name: "Konversi Lead Menjadi Prospek", target: 5, penalty: 20000, dataKey: 'prospects' },
+        { id: 3, name: "Promosi Campaign Package", target: 2, penalty: 10000, dataKey: 'promosi' }
+    ],
+    weekly: [
+        { id: 4, name: "Canvasing dan Pitching", target: 1, penalty: 50000, dataKey: 'canvasing' },
+        { id: 5, name: "Door-to-door perusahaan", target: 3, penalty: 150000, dataKey: 'doorToDoor' },
+        { id: 6, name: "Menyampaikan Quotation", target: 1, penalty: 50000, dataKey: 'quotations' },
+        { id: 7, name: "Survey pengunjung Co-living", target: 4, penalty: 50000, dataKey: 'surveys' },
+        { id: 8, name: "Laporan Ringkas Mingguan", target: 1, penalty: 50000, dataKey: 'reports' },
+        { id: 9, name: "Input CRM Survey kompetitor", target: 1, penalty: 25000, dataKey: 'crmSurveys' },
+        { id: 10, name: "Konversi Booking Venue Barter", target: 1, penalty: 75000, dataKey: 'conversions' }
+    ],
+    monthly: [
+        { id: 11, name: "Konversi Booking Kamar B2B", target: 2, penalty: 200000, dataKey: 'b2bBookings' },
+        { id: 12, name: "Konversi Booking Venue", target: 2, penalty: 200000, dataKey: 'venueBookings' },
+        { id: 13, name: "Mengikuti Event/Networking", target: 1, penalty: 125000, dataKey: 'events' },
+        { id: 14, name: "Launch Campaign Package", target: 1, penalty: 150000, dataKey: 'campaigns' }
+    ]
 };
-// Salin TARGET_CONFIG lengkap dari file asli Anda ke sini
 const ALL_DATA_KEYS = Object.values(TARGET_CONFIG).flat().map(t => t.dataKey);
 
 let allData = {};
@@ -87,7 +103,8 @@ async function loadInitialData(isInitialLoad = false) {
     allData = {}; // Reset data
 
     try {
-        const collectionsToFetch = Object.values(CONFIG.dataMapping).map(m => m.sheetName);
+        // [FIXED] Mengambil nama koleksi dari keys CONFIG.dataMapping
+        const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName)
               .where('timestamp', '>=', periodStartDate.toISOString())
@@ -98,20 +115,19 @@ async function loadInitialData(isInitialLoad = false) {
         const settingsPromises = [
             db.collection('settings').doc('kpi').get(),
             db.collection('settings').doc('timeOff').get(),
-            // [FIXED] Mengubah 'users' menjadi 'Users'
             db.collection('Users').where('role', '==', 'sales').get()
         ];
         
         const allPromises = [...fetchPromises, ...settingsPromises];
         const results = await Promise.all(allPromises);
 
-        // Proses data KPI
+        // [FIXED] Memproses data KPI dengan logika yang benar
         results.slice(0, collectionsToFetch.length).forEach((snapshot, index) => {
             const collectionName = collectionsToFetch[index];
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const dataKey = Object.keys(CONFIG.dataMapping).find(k => CONFIG.dataMapping[k].sheetName === collectionName);
-            if(dataKey) {
-                allData[CONFIG.dataMapping[dataKey].dataKey] = data;
+            const mapping = CONFIG.dataMapping[collectionName];
+            if(mapping && mapping.dataKey) {
+                allData[mapping.dataKey] = data;
             }
         });
         
@@ -120,7 +136,7 @@ async function loadInitialData(isInitialLoad = false) {
         allData.kpiSettings = kpiSettingsDoc.exists ? kpiSettingsDoc.data() : {};
 
         const timeOffDoc = results[results.length - 2];
-        allData.timeOff = timeOffDoc.exists ? timeOffDoc.data().entries : [];
+        allData.timeOff = timeOffDoc.exists ? (timeOffDoc.data().entries || []) : [];
         
         const usersSnapshot = results[results.length - 1];
         allSalesUsers = usersSnapshot.docs.map(doc => doc.data().name);
@@ -154,7 +170,8 @@ async function loadPendingEntries() {
 
     try {
         pendingEntries = {}; // Reset
-        const collectionsToFetch = Object.values(CONFIG.dataMapping).map(m => m.sheetName);
+        // [FIXED] Mengambil nama koleksi dari keys CONFIG.dataMapping
+        const collectionsToFetch = Object.keys(CONFIG.dataMapping);
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName).where('validationStatus', '==', 'Pending').get()
         );
@@ -294,8 +311,6 @@ async function handleDeleteTimeOff(id) {
 
 // =================================================================================
 // SEMUA FUNGSI UI LAINNYA (TETAP SAMA SEPERTI ASLINYA)
-// CUKUP SALIN DAN TEMPEL SEMUA FUNGSI DARI KODE LAMA ANDA DI SINI
-// MULAI DARI `updateAllUI` SAMPAI AKHIR
 // =================================================================================
 
 function updateAllUI() {
@@ -715,5 +730,4 @@ function initializeApp() {
         });
     });
     setupFilters(loadInitialData);
-    loadInitialData(true);
-}
+    loadInitialData(true)
