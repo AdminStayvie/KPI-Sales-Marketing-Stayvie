@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.0 - Firebase Integration
+ * @version 7.0.1 - Firebase Integration Case Fix
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -19,7 +19,8 @@ auth.onAuthStateChanged(user => {
             currentUser = parsedUser;
             initializeApp();
         } else {
-            db.collection('users').doc(user.uid).get().then(doc => {
+            // [FIXED] Mengubah 'users' menjadi 'Users'
+            db.collection('Users').doc(user.uid).get().then(doc => {
                 if (doc.exists && doc.data().role === 'management') {
                     currentUser = { uid: user.uid, email: user.email, ...doc.data() };
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -97,7 +98,8 @@ async function loadInitialData(isInitialLoad = false) {
         const settingsPromises = [
             db.collection('settings').doc('kpi').get(),
             db.collection('settings').doc('timeOff').get(),
-            db.collection('users').where('role', '==', 'sales').get()
+            // [FIXED] Mengubah 'users' menjadi 'Users'
+            db.collection('Users').where('role', '==', 'sales').get()
         ];
         
         const allPromises = [...fetchPromises, ...settingsPromises];
