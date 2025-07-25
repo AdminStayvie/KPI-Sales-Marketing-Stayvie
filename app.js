@@ -1,7 +1,7 @@
 /**
  * @file app.js
- * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase.
- * @version 9.0.15 - Added (non aktif) label for disabled KPIs in the sidebar menu.
+ * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase dengan unggahan file ke Google Drive.
+ * @version 10.0.0 - Migrasi unggahan file dari Firebase Storage ke Google Apps Script.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -102,16 +102,69 @@ let isFetchingData = false;
 let performanceReportWeekOffset = 0;
 
 // =================================================================================
-// FUNGSI PENGAMBILAN & PENGIRIMAN DATA (VERSI FIREBASE)
+// FUNGSI PENGAMBILAN & PENGIRIMAN DATA (DENGAN UPLOAD KE GDRIVE)
 // =================================================================================
 
-async function uploadFile(file, path) {
+/**
+ * [MODIFIKASI] Mengirim file ke Google Drive melalui Google Apps Script.
+ * @param {File} file - Objek file dari input form.
+ * @returns {Promise<string|null>} - URL file yang dapat diakses publik dari Google Drive atau null jika gagal.
+ */
+async function uploadFile(file) {
     if (!file) return null;
-    const storageRef = storage.ref();
-    const fileRef = storageRef.child(`${path}${Date.now()}_${file.name}`);
-    await fileRef.put(file);
-    return await fileRef.getDownloadURL();
+
+    // URL dari Google Apps Script Web App Anda
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz0o1xUtRSksLhlZCgDYCyJt-FS1bM2rKzIIuKLPDV0IRbo_NWlR1PI1s0P04ESO_VyBw/exec";
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                // e.target.result berisi data URL base64 (contoh: "data:image/jpeg;base64,/9j/4AAQSkZJRg...")
+                const fileDataAsBase64 = e.target.result;
+
+                const payload = {
+                    fileName: file.name,
+                    mimeType: file.type,
+                    fileData: fileDataAsBase64
+                };
+
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    // Karena payload dikirim sebagai JSON, kita tidak bisa menggunakan 'no-cors'.
+                    // Apps Script harus dikonfigurasi untuk menangani permintaan CORS.
+                    // doGet(e) dan doPost(e) di Apps Script secara otomatis menangani preflight requests.
+                    body: JSON.stringify(payload),
+                    headers: {
+                        "Content-Type": "text/plain;charset=utf-8", // Sesuai dengan tipe konten yang diterima Apps Script
+                    },
+                });
+                
+                // Membaca response sebagai JSON
+                const result = await response.json();
+
+                if (result.status === "success" && result.url) {
+                    console.log("Upload ke GDrive berhasil:", result.url);
+                    resolve(result.url);
+                } else {
+                    // Jika ada pesan error dari script, tampilkan
+                    throw new Error(result.message || 'Gagal mengunggah file ke Google Drive.');
+                }
+
+            } catch (error) {
+                console.error('Google Drive Upload Error:', error);
+                reject(error);
+            }
+        };
+        reader.onerror = error => {
+            console.error('File Reader Error:', error);
+            reject(error);
+        };
+        // Membaca file sebagai Data URL (base64)
+        reader.readAsDataURL(file);
+    });
 }
+
 
 function setupRealtimeListeners() {
     unsubscribeListeners.forEach(unsubscribe => unsubscribe());
@@ -157,7 +210,6 @@ function setupRealtimeListeners() {
             }
         });
         updateAllUI();
-        // [BARU] Panggil fungsi untuk update menu sidebar setiap kali settings berubah
         updateSidebarMenuState(); 
     });
     unsubscribeListeners.push(settingsUnsubscribe);
@@ -189,7 +241,8 @@ async function handleFormSubmit(e) {
         
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
-                const downloadURL = await uploadFile(value, `${collectionName}/${currentUser.uid}/${key}/`);
+                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
+                const downloadURL = await uploadFile(value);
                 data[key] = downloadURL;
             }
         }
@@ -281,7 +334,8 @@ async function handleUpdateLead(e) {
             
             const proofInput = form.querySelector('#modalProofOfDeal');
             if (proofInput && proofInput.files.length > 0) {
-                newData.proofOfDeal = await uploadFile(proofInput.files[0], 'proofsOfDeal/');
+                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
+                newData.proofOfDeal = await uploadFile(proofInput.files[0]);
             } else if (!leadData.proofOfDeal) {
                 throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
             }
@@ -336,7 +390,8 @@ async function handleRevisionSubmit(e) {
         
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
-                const downloadURL = await uploadFile(value, `${collectionName}/${key}/`);
+                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
+                const downloadURL = await uploadFile(value);
                 dataToUpdate[key] = downloadURL;
             } else if (!(value instanceof File)) {
                 dataToUpdate[key] = value;
@@ -369,15 +424,13 @@ async function handleRevisionSubmit(e) {
 }
 
 // =================================================================================
-// FUNGSI UI & PERHITUNGAN
+// FUNGSI UI & PERHITUNGAN (TIDAK ADA PERUBAHAN DI SINI)
 // =================================================================================
 
-// [BARU] Fungsi untuk update tampilan menu sidebar
 function updateSidebarMenuState() {
     const kpiSettings = currentData.kpiSettings || {};
     const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
 
-    // Buat map dari page ke target ID
     const pageToTargetId = {};
     allTargets.forEach(target => {
         if (!pageToTargetId[target.page]) {
@@ -389,7 +442,6 @@ function updateSidebarMenuState() {
     document.querySelectorAll('.nav-link[data-page]').forEach(link => {
         const page = link.dataset.page;
         if (pageToTargetId[page]) {
-            // Cek apakah SEMUA target yang berhubungan dengan halaman ini non-aktif
             const allTargetsForPageDisabled = pageToTargetId[page].every(id => kpiSettings[id] === false);
 
             const existingSpan = link.querySelector('.inactive-span');
@@ -423,7 +475,7 @@ function updateAllUI() {
         calculateAndDisplayPenalties();
         updateValidationBreakdown();
         renderPerformanceReport();
-        updateSidebarMenuState(); // Panggil juga di sini untuk memastikan konsistensi
+        updateSidebarMenuState(); 
     } catch (error) {
         console.error("Error updating UI:", error);
         showMessage("Terjadi kesalahan saat menampilkan data. Coba refresh halaman.", "error");
