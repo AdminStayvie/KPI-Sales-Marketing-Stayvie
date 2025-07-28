@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase dengan unggahan file ke Google Drive.
- * @version 10.0.0 - Migrasi unggahan file dari Firebase Storage ke Google Apps Script.
+ * @version 10.1.0 - [MODIFIKASI] Menambahkan pembuatan data Prospek otomatis saat Lead langsung diubah menjadi Deal.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -76,7 +76,7 @@ const CONFIG = {
         'prospects': { sheetName: 'Prospects', headers: ['Waktu', 'Customer', 'Produk', 'Status Lead', 'Status Validasi', 'Aksi'], rowGenerator: 'generateLeadRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status', revisionLog: 'Log Revisi' } },
         'b2bBookings': { sheetName: 'B2BBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status', revisionLog: 'Log Revisi' } },
         'venueBookings': { sheetName: 'VenueBookings', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status', revisionLog: 'Log Revisi' } },
-        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', status: 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status', revisionLog: 'Log Revisi' } },
+        'dealLainnya': { sheetName: 'Deal Lainnya', headers: ['Waktu', 'Customer', 'Produk', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { timestamp: 'Waktu Input', customerName: 'Nama Customer', leadSource: 'Sumber Lead', product: 'Produk', contact: 'Kontak', proofOfLead: 'Bukti Lead', notes: 'Catatan Awal', 'status': 'Status Lead', proofOfDeal: 'Bukti Deal', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', statusLog: 'Log Status', revisionLog: 'Log Revisi' } },
         'canvasing': { sheetName: 'Canvasing', headers: ['Waktu', 'Judul Meeting', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', meetingTitle: 'Judul Meeting', document: 'File', notes: 'Catatan', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', revisionLog: 'Log Revisi' } },
         'promosi': { sheetName: 'Promosi', headers: ['Waktu', 'Campaign', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Upload', campaignName: 'Nama Campaign', platform: 'Platform', screenshot: 'Screenshot', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', revisionLog: 'Log Revisi' }},
         'doorToDoor': { sheetName: 'DoorToDoor', headers: ['Waktu', 'Instansi', 'Status Validasi', 'Aksi'], rowGenerator: 'generateSimpleRow', detailLabels: { datestamp: 'Waktu Input', visitDate: 'Tanggal Kunjungan', institutionName: 'Nama Instansi', address: 'Alamat', picName: 'Nama PIC', picPhone: 'Kontak PIC', response: 'Hasil Kunjungan', proof: 'Bukti', validationStatus: 'Status Validasi', validationNotes: 'Catatan Validasi', revisionLog: 'Log Revisi' } },
@@ -106,7 +106,7 @@ let performanceReportWeekOffset = 0;
 // =================================================================================
 
 /**
- * [MODIFIKASI] Mengirim file ke Google Drive melalui Google Apps Script.
+ * Mengirim file ke Google Drive melalui Google Apps Script.
  * @param {File} file - Objek file dari input form.
  * @returns {Promise<string|null>} - URL file yang dapat diakses publik dari Google Drive atau null jika gagal.
  */
@@ -120,7 +120,6 @@ async function uploadFile(file) {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                // e.target.result berisi data URL base64 (contoh: "data:image/jpeg;base64,/9j/4AAQSkZJRg...")
                 const fileDataAsBase64 = e.target.result;
 
                 const payload = {
@@ -131,23 +130,18 @@ async function uploadFile(file) {
 
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    // Karena payload dikirim sebagai JSON, kita tidak bisa menggunakan 'no-cors'.
-                    // Apps Script harus dikonfigurasi untuk menangani permintaan CORS.
-                    // doGet(e) dan doPost(e) di Apps Script secara otomatis menangani preflight requests.
                     body: JSON.stringify(payload),
                     headers: {
-                        "Content-Type": "text/plain;charset=utf-8", // Sesuai dengan tipe konten yang diterima Apps Script
+                        "Content-Type": "text/plain;charset=utf-8", 
                     },
                 });
                 
-                // Membaca response sebagai JSON
                 const result = await response.json();
 
                 if (result.status === "success" && result.url) {
                     console.log("Upload ke GDrive berhasil:", result.url);
                     resolve(result.url);
                 } else {
-                    // Jika ada pesan error dari script, tampilkan
                     throw new Error(result.message || 'Gagal mengunggah file ke Google Drive.');
                 }
 
@@ -160,7 +154,6 @@ async function uploadFile(file) {
             console.error('File Reader Error:', error);
             reject(error);
         };
-        // Membaca file sebagai Data URL (base64)
         reader.readAsDataURL(file);
     });
 }
@@ -241,7 +234,6 @@ async function handleFormSubmit(e) {
         
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
-                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
                 const downloadURL = await uploadFile(value);
                 data[key] = downloadURL;
             }
@@ -324,6 +316,17 @@ async function handleUpdateLead(e) {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
 
+            // [MODIFIKASI DIMULAI] Tambahkan data ke Prospek secara otomatis jika sumbernya adalah Lead
+            if (sourceCollectionName === 'Leads') {
+                const prospectData = { ...originalDoc.data() };
+                prospectData.status = 'Prospect';
+                prospectData.statusLog = (prospectData.statusLog || '') + `\n${getDatestamp()}: Status otomatis diubah menjadi Prospect saat konversi ke Deal.`;
+                prospectData.timestamp = new Date().toISOString(); // Update timestamp untuk prospek
+                await db.collection('Prospects').add(prospectData);
+                showMessage('Info: Data Prospek otomatis dibuat.', 'info');
+            }
+            // [MODIFIKASI SELESAI]
+
             const dealCollectionName = getDealCollectionName(leadData.product);
             
             const newData = { ...originalDoc.data() };
@@ -334,7 +337,6 @@ async function handleUpdateLead(e) {
             
             const proofInput = form.querySelector('#modalProofOfDeal');
             if (proofInput && proofInput.files.length > 0) {
-                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
                 newData.proofOfDeal = await uploadFile(proofInput.files[0]);
             } else if (!leadData.proofOfDeal) {
                 throw new Error('Bukti deal wajib diunggah saat mengubah status menjadi "Deal".');
@@ -390,7 +392,6 @@ async function handleRevisionSubmit(e) {
         
         for (const [key, value] of formData.entries()) {
             if (value instanceof File && value.size > 0) {
-                // [MODIFIKASI] Memanggil fungsi uploadFile yang baru
                 const downloadURL = await uploadFile(value);
                 dataToUpdate[key] = downloadURL;
             } else if (!(value instanceof File)) {
