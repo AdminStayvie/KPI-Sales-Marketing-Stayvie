@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase dengan unggahan file ke Google Drive.
- * @version 10.1.0 - [MODIFIKASI] Menambahkan pembuatan data Prospek otomatis saat Lead langsung diubah menjadi Deal.
+ * @version 10.1.1 - [FIX] Memperbaiki pembuatan data Prospek otomatis agar lebih robust dan selalu terhitung di KPI.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -318,10 +318,20 @@ async function handleUpdateLead(e) {
 
             // [MODIFIKASI DIMULAI] Tambahkan data ke Prospek secara otomatis jika sumbernya adalah Lead
             if (sourceCollectionName === 'Leads') {
-                const prospectData = { ...originalDoc.data() };
-                prospectData.status = 'Prospect';
-                prospectData.statusLog = (prospectData.statusLog || '') + `\n${getDatestamp()}: Status otomatis diubah menjadi Prospect saat konversi ke Deal.`;
-                prospectData.timestamp = new Date().toISOString(); // Update timestamp untuk prospek
+                const originalData = originalDoc.data();
+                const prospectData = {
+                    ...originalData, // Salin semua data asli terlebih dahulu
+                    status: 'Prospect', // Atur status baru
+                    statusLog: (originalData.statusLog || '') + `\n${getDatestamp()}: Status otomatis diubah menjadi Prospect saat konversi ke Deal.`,
+                    timestamp: new Date().toISOString(), // Atur timestamp baru untuk kejadian ini
+                    datestamp: getDatestamp(), // Atur datestamp baru untuk kejadian ini
+                    validationStatus: 'Pending', // Atur status validasi secara eksplisit ke Pending
+                    validationNotes: '' // Hapus catatan validasi sebelumnya
+                };
+                
+                // Hapus field yang spesifik untuk 'Deal' jika ada, untuk kebersihan data
+                delete prospectData.proofOfDeal;
+
                 await db.collection('Prospects').add(prospectData);
                 showMessage('Info: Data Prospek otomatis dibuat.', 'info');
             }
