@@ -113,7 +113,6 @@
                     <div class="dashboard-layout">
                         <div class="leaderboard-container card"><div class="card__header"><h3>Papan Peringkat Sales (Berdasarkan Data Approved)</h3></div><div class="card__body"><div id="leaderboard" class="summary-table"></div></div></div>
                         <div class="card">
-                            <!-- [REVISI] Menambahkan navigasi carousel -->
                             <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
                                 <h3>Laporan Kinerja Rinci per Sales</h3>
                                 <div id="managementReportNav" class="carousel-nav">
@@ -174,8 +173,30 @@
 
                 <!-- Halaman 4: Pengaturan KPI -->
                 <div id="kpiSettings" class="content-page">
-                    <div class="page-header"><h2>Pengaturan Target KPI Aktif</h2></div>
-                    <div class="card"><div class="card__body"><p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard. Perubahan akan langsung berlaku.</p><div id="kpiSettingsContainer" class="admin-settings-grid"><div style="padding: 24px; text-align: center;">Memuat pengaturan...</div></div></div></div>
+                    <div class="page-header"><h2>Pengaturan KPI</h2></div>
+                    
+                    <!-- [BARU] Pengaturan Batas Waktu Input -->
+                    <div class="card" style="margin-bottom: var(--space-24);">
+                        <div class="card__header"><h3>Pengaturan Batas Waktu Input Harian</h3></div>
+                        <div class="card__body">
+                            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">
+                                Aktifkan untuk menolak input data target harian (Leads, Prospek, Promosi) setelah melewati jam yang ditentukan.
+                            </p>
+                            <div id="cutoffSettingsContainer" class="admin-settings-grid">
+                                <!-- Konten akan di-render oleh JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card__header"><h3>Pengaturan Target KPI Aktif</h3></div>
+                        <div class="card__body">
+                            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard.</p>
+                            <div id="kpiSettingsContainer" class="admin-settings-grid">
+                                <div style="padding: 24px; text-align: center;">Memuat pengaturan...</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -197,21 +218,20 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     <script>
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
-  authDomain: "admin-stayvie.firebaseapp.com",
-  projectId: "admin-stayvie",
-  storageBucket: "admin-stayvie.firebasestorage.app",
-  messagingSenderId: "263821398757",
-  appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
-};
-      if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-      }
-      const db = firebase.firestore();
-      const auth = firebase.auth();
-      const storage = firebase.storage();
+        const firebaseConfig = {
+            apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
+            authDomain: "admin-stayvie.firebaseapp.com",
+            projectId: "admin-stayvie",
+            storageBucket: "admin-stayvie.firebasestorage.app",
+            messagingSenderId: "263821398757",
+            appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const storage = firebase.storage();
     </script>
     <script src="utils.js"></script>
     <script src="management.js"></script>
