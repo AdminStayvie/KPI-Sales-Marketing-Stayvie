@@ -1,7 +1,7 @@
 /**
  * @file app.js
  * @description Logika utama untuk dashboard KPI Sales, diadaptasi untuk Firebase dengan unggahan file ke Google Drive.
- * @version 10.1.1 - [FIX] Memperbaiki pembuatan data Prospek otomatis agar lebih robust dan selalu terhitung di KPI.
+ * @version 11.0.0 - Added daily input cutoff logic based on management settings.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -102,62 +102,35 @@ let isFetchingData = false;
 let performanceReportWeekOffset = 0;
 
 // =================================================================================
-// FUNGSI PENGAMBILAN & PENGIRIMAN DATA (DENGAN UPLOAD KE GDRIVE)
+// FUNGSI PENGAMBILAN & PENGIRIMAN DATA
 // =================================================================================
 
-/**
- * Mengirim file ke Google Drive melalui Google Apps Script.
- * @param {File} file - Objek file dari input form.
- * @returns {Promise<string|null>} - URL file yang dapat diakses publik dari Google Drive atau null jika gagal.
- */
 async function uploadFile(file) {
     if (!file) return null;
-
-    // URL dari Google Apps Script Web App Anda
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz0o1xUtRSksLhlZCgDYCyJt-FS1bM2rKzIIuKLPDV0IRbo_NWlR1PI1s0P04ESO_VyBw/exec";
-
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const fileDataAsBase64 = e.target.result;
-
-                const payload = {
-                    fileName: file.name,
-                    mimeType: file.type,
-                    fileData: fileDataAsBase64
-                };
-
                 const response = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    body: JSON.stringify(payload),
-                    headers: {
-                        "Content-Type": "text/plain;charset=utf-8", 
-                    },
+                    body: JSON.stringify({ fileName: file.name, mimeType: file.type, fileData: e.target.result }),
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                 });
-                
                 const result = await response.json();
-
                 if (result.status === "success" && result.url) {
-                    console.log("Upload ke GDrive berhasil:", result.url);
                     resolve(result.url);
                 } else {
-                    throw new Error(result.message || 'Gagal mengunggah file ke Google Drive.');
+                    throw new Error(result.message || 'Gagal mengunggah file.');
                 }
-
             } catch (error) {
-                console.error('Google Drive Upload Error:', error);
                 reject(error);
             }
         };
-        reader.onerror = error => {
-            console.error('File Reader Error:', error);
-            reject(error);
-        };
+        reader.onerror = error => reject(error);
         reader.readAsDataURL(file);
     });
 }
-
 
 function setupRealtimeListeners() {
     unsubscribeListeners.forEach(unsubscribe => unsubscribe());
@@ -200,6 +173,8 @@ function setupRealtimeListeners() {
                 currentData.kpiSettings = doc.data();
             } else if (doc.id === 'timeOff') {
                 currentData.timeOff = doc.data().entries || [];
+            } else if (doc.id === 'cutoff') {
+                currentData.cutoffSettings = doc.data();
             }
         });
         updateAllUI();
@@ -214,6 +189,24 @@ async function handleFormSubmit(e) {
     const form = e.target;
     const collectionName = form.dataset.sheetName;
     if (!collectionName) return;
+
+    // [BARU] Logika Pengecekan Batas Waktu (Cutoff)
+    const dailyTargetDataKeys = CONFIG.targets.daily.map(t => CONFIG.dataMapping[t.dataKey].sheetName);
+    const isDailyTarget = dailyTargetDataKeys.includes(collectionName);
+    
+    if (isDailyTarget && currentData.cutoffSettings && currentData.cutoffSettings.isEnabled) {
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes(); // Waktu saat ini dalam menit
+
+        const cutoffTimeParts = currentData.cutoffSettings.time.split(':');
+        const cutoffTime = parseInt(cutoffTimeParts[0]) * 60 + parseInt(cutoffTimeParts[1]); // Waktu cutoff dalam menit
+
+        if (currentTime > cutoffTime) {
+            showMessage(`Waktu input untuk target harian sudah lewat. Batas waktu adalah pukul ${currentData.cutoffSettings.time}.`, 'error');
+            return; // Hentikan proses submit
+        }
+    }
+    // [AKHIR] Logika Pengecekan
 
     const button = form.querySelector('button[type="submit"]');
     let originalButtonText = '';
@@ -316,26 +309,21 @@ async function handleUpdateLead(e) {
             const originalDoc = await originalDocRef.get();
             if (!originalDoc.exists) throw new Error("Dokumen asli tidak ditemukan di database.");
 
-            // [MODIFIKASI DIMULAI] Tambahkan data ke Prospek secara otomatis jika sumbernya adalah Lead
             if (sourceCollectionName === 'Leads') {
                 const originalData = originalDoc.data();
                 const prospectData = {
-                    ...originalData, // Salin semua data asli terlebih dahulu
-                    status: 'Prospect', // Atur status baru
+                    ...originalData,
+                    status: 'Prospect',
                     statusLog: (originalData.statusLog || '') + `\n${getDatestamp()}: Status otomatis diubah menjadi Prospect saat konversi ke Deal.`,
-                    timestamp: new Date().toISOString(), // Atur timestamp baru untuk kejadian ini
-                    datestamp: getDatestamp(), // Atur datestamp baru untuk kejadian ini
-                    validationStatus: 'Pending', // Atur status validasi secara eksplisit ke Pending
-                    validationNotes: '' // Hapus catatan validasi sebelumnya
+                    timestamp: new Date().toISOString(),
+                    datestamp: getDatestamp(),
+                    validationStatus: 'Pending',
+                    validationNotes: ''
                 };
-                
-                // Hapus field yang spesifik untuk 'Deal' jika ada, untuk kebersihan data
                 delete prospectData.proofOfDeal;
-
                 await db.collection('Prospects').add(prospectData);
                 showMessage('Info: Data Prospek otomatis dibuat.', 'info');
             }
-            // [MODIFIKASI SELESAI]
 
             const dealCollectionName = getDealCollectionName(leadData.product);
             
@@ -435,13 +423,12 @@ async function handleRevisionSubmit(e) {
 }
 
 // =================================================================================
-// FUNGSI UI & PERHITUNGAN (TIDAK ADA PERUBAHAN DI SINI)
+// FUNGSI UI & PERHITUNGAN
 // =================================================================================
 
 function updateSidebarMenuState() {
     const kpiSettings = currentData.kpiSettings || {};
     const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
-
     const pageToTargetId = {};
     allTargets.forEach(target => {
         if (!pageToTargetId[target.page]) {
@@ -454,7 +441,6 @@ function updateSidebarMenuState() {
         const page = link.dataset.page;
         if (pageToTargetId[page]) {
             const allTargetsForPageDisabled = pageToTargetId[page].every(id => kpiSettings[id] === false);
-
             const existingSpan = link.querySelector('.inactive-span');
             if (allTargetsForPageDisabled) {
                 if (!existingSpan) {
@@ -477,7 +463,6 @@ function updateSidebarMenuState() {
         }
     });
 }
-
 
 function updateAllUI() {
     try {
@@ -517,7 +502,6 @@ function updateDashboard() {
     if (!currentUser || !currentData.kpiSettings) return;
     document.getElementById('userDisplayName').textContent = currentUser.name;
     const kpiSettings = currentData.kpiSettings || {};
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -531,7 +515,6 @@ function updateDashboard() {
         }
     });
     updateProgressBar('daily', dailyAchieved, dailyTotal);
-
     const now = new Date();
     const weekStart = getWeekStart(now);
     const weekEnd = new Date(weekStart);
@@ -546,7 +529,6 @@ function updateDashboard() {
         }
     });
     updateProgressBar('weekly', weeklyAchieved, weeklyTotal);
-
     let monthlyAchieved = 0;
     let monthlyTotal = 0;
     CONFIG.targets.monthly.forEach(target => {
@@ -563,10 +545,8 @@ function calculateAndDisplayPenalties() {
     const potentialPenaltyEl = document.getElementById('potentialPenalty');
     const finalPenaltyEl = document.getElementById('finalPenalty');
     if (!potentialPenaltyEl || !finalPenaltyEl) return;
-
     const potentialPenalty = calculatePenaltyForValidationStatus(['approved', 'pending']);
     potentialPenaltyEl.textContent = formatCurrency(potentialPenalty);
-
     const finalPenalty = calculatePenaltyForValidationStatus(['approved']);
     finalPenaltyEl.textContent = formatCurrency(finalPenalty);
 }
@@ -579,9 +559,7 @@ function calculatePenaltyForValidationStatus(validationFilter) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
-
     if (today < periodStartDate || !currentData.timeOff) return 0;
-
     CONFIG.targets.daily.forEach(target => {
         if (kpiSettings[target.id] === false) return;
         datesToCheck.forEach(date => {
@@ -596,7 +574,6 @@ function calculatePenaltyForValidationStatus(validationFilter) {
             }
         });
     });
-
     const sundaysInPeriod = datesToCheck.filter(date => date.getDay() === 0);
     CONFIG.targets.weekly.forEach(target => {
         if (kpiSettings[target.id] === false) return;
@@ -611,7 +588,6 @@ function calculatePenaltyForValidationStatus(validationFilter) {
             if (achievedThisWeek < target.target) totalPenalty += target.penalty;
         });
     });
-
     if (today > periodEndDate) {
         CONFIG.targets.monthly.forEach(target => {
             if (kpiSettings[target.id] === false) return;
@@ -655,7 +631,6 @@ function updateProgressBar(type, achieved, total) {
     const percentageText = document.getElementById(`${type}Percentage`);
     const achievedText = document.getElementById(`${type}Achieved`);
     const totalText = document.getElementById(`${type}Total`);
-
     if (progressFill) progressFill.style.width = `${percentage}%`;
     if (percentageText) percentageText.textContent = `${percentage}%`;
     if (achievedText) achievedText.textContent = achieved;
@@ -666,7 +641,6 @@ function renderPerformanceReport() {
     const table = document.getElementById('performanceTable');
     const kpiSettings = currentData.kpiSettings || {};
     if (!table) return;
-
     const todayString = toLocalDateString(new Date());
     const periodDates = getDatesForPeriod();
     if (periodDates.length === 0) {
@@ -674,7 +648,6 @@ function renderPerformanceReport() {
         return;
     }
     const weekDates = periodDates.slice(performanceReportWeekOffset * 7, (performanceReportWeekOffset * 7) + 7);
-
     const dailyCounts = {};
     const allTargets = [...CONFIG.targets.daily, ...CONFIG.targets.weekly, ...CONFIG.targets.monthly];
     allTargets.forEach(target => {
@@ -684,35 +657,29 @@ function renderPerformanceReport() {
             const itemDate = new Date(item.timestamp);
             if (!itemDate) return;
             const dateString = toLocalDateString(itemDate);
-            
             if (!dailyCounts[dateString]) dailyCounts[dateString] = {};
             if (!dailyCounts[dateString][target.dataKey]) dailyCounts[dateString][target.dataKey] = { P: 0, A: 0, R: 0 };
-            
             const status = (item.validationStatus || 'pending').toLowerCase();
             if (status === 'pending') dailyCounts[dateString][target.dataKey].P++;
             else if (status === 'approved') dailyCounts[dateString][target.dataKey].A++;
             else if (status === 'rejected') dailyCounts[dateString][target.dataKey].R++;
         });
     });
-
     let tableHeaderHTML = '<thead><tr><th>Target KPI</th>';
     weekDates.forEach(date => {
         const isTodayClass = toLocalDateString(date) === todayString ? 'is-today' : '';
         tableHeaderHTML += `<th class="${isTodayClass}">${date.toLocaleDateString('id-ID', { weekday: 'short' })}<br>${date.getDate()}</th>`;
     });
     tableHeaderHTML += '</tr></thead>';
-
     let tableBodyHTML = '<tbody>';
     ['daily', 'weekly'].forEach(period => {
         CONFIG.targets[period].forEach(target => {
             if (kpiSettings[target.id] === false) return;
-            
             tableBodyHTML += `<tr><td>${target.name} (${target.target})</td>`;
             weekDates.forEach(date => {
                 const isTodayClass = toLocalDateString(date) === todayString ? 'is-today' : '';
                 let cellContent = '';
                 const dateString = toLocalDateString(date);
-                
                 if (period === 'daily') {
                     const counts = dailyCounts[dateString]?.[target.dataKey] || { P: 0, A: 0, R: 0 };
                     cellContent = isDayOff(date, currentUser.name)
@@ -737,10 +704,8 @@ function renderPerformanceReport() {
             tableBodyHTML += '</tr>';
         });
     });
-
     CONFIG.targets.monthly.forEach(target => {
         if (kpiSettings[target.id] === false) return;
-        
         let totalP = 0, totalA = 0, totalR = 0;
         (currentData[target.dataKey] || []).forEach(item => {
             const status = (item.validationStatus || 'pending').toLowerCase();
@@ -748,7 +713,6 @@ function renderPerformanceReport() {
             else if (status === 'approved') totalA++;
             else if (status === 'rejected') totalR++;
         });
-
         tableBodyHTML += `<tr>
             <td>${target.name} (${target.target})</td>
             <td colspan="7" class="monthly-total-cell">
@@ -759,10 +723,8 @@ function renderPerformanceReport() {
             </td>
         </tr>`;
     });
-
     tableBodyHTML += '</tbody>';
     table.innerHTML = tableHeaderHTML + tableBodyHTML;
-
     document.getElementById('prevWeekBtn').disabled = (performanceReportWeekOffset === 0);
     const totalWeeks = Math.ceil(periodDates.length / 7);
     document.getElementById('nextWeekBtn').disabled = (performanceReportWeekOffset >= totalWeeks - 1);
@@ -799,33 +761,25 @@ function updateLeadTabs() {
     const prospectContainer = document.getElementById('prospectContent');
     const dealContainer = document.getElementById('dealContent');
     if (!leadContainer || !prospectContainer || !dealContainer) return;
-
     const allLeads = currentData.leads || [];
     const allProspects = currentData.prospects || [];
-    
     const leads = allLeads.filter(item => item && (item.status === 'Lead' || item.validationStatus === 'Rejected'));
     const prospects = allProspects.filter(item => 
     item && 
     item.validationStatus !== 'Rejected' && 
     !(item.statusLog && item.statusLog.includes('Status otomatis diubah'))
 );
-    const rejectedProspects = allProspects.filter(item => item && item.validationStatus === 'Rejected');
-
-
     renderLeadTable(leadContainer, leads, 'leads');
     renderLeadTable(prospectContainer, prospects, 'prospects');
-    
     const allDeals = [
         ...(currentData.b2bBookings || []).map(d => ({...d, originalDataKey: 'b2bBookings'})),
         ...(currentData.venueBookings || []).map(d => ({...d, originalDataKey: 'venueBookings'})),
         ...(currentData.dealLainnya || []).map(d => ({...d, originalDataKey: 'dealLainnya'}))
     ];
-    
     if (allDeals.length === 0) {
         dealContainer.innerHTML = `<div class="empty-state">Belum ada data Deal untuk periode ini</div>`;
         return;
     }
-
     allDeals.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const mapping = CONFIG.dataMapping['leads'];
     const headers = mapping.headers;
@@ -855,12 +809,10 @@ function generateSimpleRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const statusClass = validationStatus.toLowerCase();
     const mainValue = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
-    
     let actionCell = '-';
     if (validationStatus.toLowerCase() === 'rejected') {
         actionCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
     }
-
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
@@ -875,16 +827,13 @@ function generateLeadRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
     let actionButton = '-';
-
     if ((dataKey === 'leads' || dataKey === 'prospects') && validationStatus.toLowerCase() !== 'rejected') {
         actionButton = `<button class="btn btn--sm btn--outline" onclick="openUpdateModal('${item.id}'); event.stopPropagation();">Update</button>`;
     }
-    
     let validationCell = `<span class="status status--${validationStatusClass}">${validationStatus}</span>`;
     if (validationStatus.toLowerCase() === 'rejected') {
         validationCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
     }
-
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
@@ -899,12 +848,10 @@ function generateLeadRow(item, dataKey) {
 function generateDealRow(item, dataKey) {
     const validationStatus = item.validationStatus || 'Pending';
     const validationStatusClass = validationStatus.toLowerCase();
-    
     let actionCell = '-';
     if (validationStatus.toLowerCase() === 'rejected') {
         actionCell = `<button class="btn btn--sm btn--revise" onclick="openRevisionModal('${item.id}', '${dataKey}'); event.stopPropagation();">Revisi</button>`;
     }
-
     return `
         <tr onclick="openDetailModal('${item.id}', '${dataKey}')">
             <td>${item.datestamp || ''}</td>
@@ -920,7 +867,6 @@ function openUpdateModal(leadId) {
     const modal = document.getElementById('updateLeadModal');
     const allLeadsAndProspects = [...(currentData.leads || []), ...(currentData.prospects || [])];
     const lead = allLeadsAndProspects.find(l => l && l.id === leadId);
-
     if (!lead || !modal) {
         showMessage('Data untuk diupdate tidak ditemukan.', 'error');
         return;
@@ -930,20 +876,17 @@ function openUpdateModal(leadId) {
     const statusSelect = document.getElementById('updateStatus');
     const proofContainer = document.getElementById('proofOfDealContainer');
     const proofInput = document.getElementById('modalProofOfDeal');
-    
     statusSelect.innerHTML = '';
     const currentStatus = lead.status || 'Lead';
     document.getElementById('modalCurrentStatus').textContent = currentStatus;
     const statusElement = document.getElementById('modalCurrentStatus');
     statusElement.className = `status status--${currentStatus.toLowerCase().replace(/\s+/g, '-')}`;
     statusElement.style.paddingLeft = '0';
-    
     if (currentStatus === 'Lead') {
         statusSelect.innerHTML = `<option value="Prospect">Prospect</option><option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     } else if (currentStatus === 'Prospect') {
         statusSelect.innerHTML = `<option value="Deal">Deal</option><option value="Lost">Lost</option>`;
     }
-
     const toggleProofVisibility = () => {
         if (statusSelect.value === 'Deal') {
             proofContainer.style.display = 'block';
@@ -953,11 +896,9 @@ function openUpdateModal(leadId) {
             proofInput.required = false;
         }
     };
-
     statusSelect.removeEventListener('change', toggleProofVisibility);
     statusSelect.addEventListener('change', toggleProofVisibility);
     toggleProofVisibility();
-
     modal.classList.add('active');
 }
 
@@ -965,34 +906,27 @@ function openRevisionModal(itemId, dataKey) {
     const allData = Object.values(currentData).flat();
     const item = allData.find(d => d && d.id === itemId);
     const mapping = CONFIG.dataMapping[dataKey];
-
     if (!item || !mapping) {
         showMessage('Data untuk direvisi tidak ditemukan.', 'error');
         return;
     }
-
     const modal = document.getElementById('revisionModal');
     const formContainer = document.getElementById('revisionForm');
     const notesText = document.getElementById('rejectionNotesText');
-
     notesText.textContent = item.validationNotes || 'Tidak ada catatan.';
     formContainer.innerHTML = '';
     formContainer.dataset.sheetName = mapping.sheetName;
     formContainer.dataset.id = item.id;
-
     const pageId = FORM_PAGE_MAP[dataKey];
     const formTemplate = pageId ? document.querySelector(`#${pageId} .kpi-form`) : null;
-    
     if (formTemplate) {
         formContainer.innerHTML = formTemplate.innerHTML;
-        
         for (const key in item) {
             const input = formContainer.querySelector(`[name="${key}"]`);
             if (input && input.type !== 'file') {
                 input.value = item[key];
             }
         }
-        
         const submitButton = formContainer.querySelector('button[type="submit"]');
         if (submitButton) {
             submitButton.textContent = 'Kirim Ulang untuk Validasi';
@@ -1001,7 +935,6 @@ function openRevisionModal(itemId, dataKey) {
         formContainer.innerHTML = '<p class="message error">Tidak dapat memuat form revisi.</p>';
         console.error(`Form template tidak ditemukan untuk dataKey: ${dataKey}`);
     }
-
     modal.classList.add('active');
 }
 
@@ -1020,33 +953,26 @@ function openDetailModal(itemId, dataKey) {
     const allData = Object.values(currentData).flat();
     const item = allData.find(d => d && d.id === itemId);
     const mapping = CONFIG.dataMapping[dataKey];
-
     if (!item || !mapping) {
         console.error("Data atau mapping tidak ditemukan:", itemId, dataKey);
         showMessage("Tidak dapat menampilkan detail data.", "error");
         return;
     }
-
     const modal = document.getElementById('detailModal');
     const modalTitle = document.getElementById('detailModalTitle');
     const modalBody = document.getElementById('detailModalBody');
     if(!modal || !modalTitle || !modalBody) return;
-    
     modalTitle.textContent = `Detail Data`;
     modalBody.innerHTML = '';
-
     const detailList = document.createElement('dl');
     detailList.className = 'detail-list';
     const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
-
     for (const key in mapping.detailLabels) {
         if (Object.prototype.hasOwnProperty.call(item, key) && (item[key] || item[key] === 0 || typeof item[key] === 'string')) {
             const dt = document.createElement('dt');
             dt.textContent = mapping.detailLabels[key];
-            
             const dd = document.createElement('dd');
             let value = item[key];
-
             if (key === 'timestamp') value = item.datestamp || formatDate(item.timestamp);
             else if (dateFields.includes(key)) value = formatDate(value);
             else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
@@ -1057,19 +983,17 @@ function openDetailModal(itemId, dataKey) {
                  dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
                 detailList.appendChild(dt); detailList.appendChild(dd); continue;
             }
-            
             dd.textContent = value;
             detailList.appendChild(dt);
             detailList.appendChild(dd);
         }
     }
-    
     modalBody.appendChild(detailList);
     modal.classList.add('active');
 }
 
 function isDayOff(date, salesName) {
-    if (date.getDay() === 0) return true; // Minggu selalu libur
+    if (date.getDay() === 0) return true;
     const dateString = toLocalDateString(date);
     const timeOffData = currentData.timeOff || [];
     if (!Array.isArray(timeOffData)) return false;
@@ -1095,7 +1019,6 @@ function setupEventListeners() {
     });
     document.getElementById('updateLeadForm')?.addEventListener('submit', handleUpdateLead);
     document.getElementById('revisionForm')?.addEventListener('submit', handleRevisionSubmit);
-    
     document.querySelectorAll('#leadTabsContainer .tab-button').forEach(button => {
         button.addEventListener('click', () => {
             document.querySelectorAll('#leadTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
@@ -1104,14 +1027,12 @@ function setupEventListeners() {
             document.getElementById(button.dataset.tab).classList.add('active');
         });
     });
-
     document.getElementById('prevWeekBtn').addEventListener('click', () => {
         if (performanceReportWeekOffset > 0) {
             performanceReportWeekOffset--;
             renderPerformanceReport();
         }
     });
-
     document.getElementById('nextWeekBtn').addEventListener('click', () => {
         const periodDates = getDatesForPeriod();
         const totalWeeks = Math.ceil(periodDates.length / 7);
