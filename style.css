@@ -1465,3 +1465,28 @@ input:checked + .toggle-slider:before {
 .btn--revise:hover {
     background-color: var(--color-orange-400);
 }
+/* [NEW] Password Toggle Icon Styles */
+.password-container {
+  position: relative;
+}
+
+.password-container .form-control {
+  padding-right: 45px; /* Memberi ruang untuk ikon */
+}
+
+.toggle-password-icon {
+  position: absolute;
+  right: 15px;
+  /* Penyesuaian posisi vertikal agar pas di tengah input field */
+  top: calc(50% + 12px); 
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-password-icon:hover {
+    color: var(--color-text);
+}
