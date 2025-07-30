@@ -804,7 +804,11 @@ function updateLeadTabs() {
     const allProspects = currentData.prospects || [];
     
     const leads = allLeads.filter(item => item && (item.status === 'Lead' || item.validationStatus === 'Rejected'));
-    const prospects = allProspects.filter(item => item && item.validationStatus !== 'Rejected');
+    const prospects = allProspects.filter(item => 
+    item && 
+    item.validationStatus !== 'Rejected' && 
+    !(item.statusLog && item.statusLog.includes('Status otomatis diubah'))
+);
     const rejectedProspects = allProspects.filter(item => item && item.validationStatus === 'Rejected');
 
 
