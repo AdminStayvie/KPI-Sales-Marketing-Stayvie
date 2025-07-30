@@ -1,7 +1,7 @@
 /**
  * @file management.js
- * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase.
- * @version 7.0.8 - Implemented weekly carousel for detailed performance report.
+ * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase dengan notifikasi WAHA.
+ * @version 8.0.0 - Added WAHA notification for target achievements.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -84,7 +84,6 @@ let allData = {};
 let allSalesUsers = [];
 let isFetching = false;
 let pendingEntries = {};
-// [BARU] Variabel untuk carousel
 let managementReportWeekOffset = 0;
 
 // =================================================================================
@@ -159,6 +158,9 @@ async function loadInitialData(isInitialLoad = false) {
         updateAllUI();
         if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
 
+        // [BARU] Panggil fungsi pengecekan notifikasi setelah semua data dimuat
+        await checkTargetAchievementAndNotify();
+
     } catch (error) {
         let errorMessage = `Gagal memuat data awal: ${error.message}`;
         if (isInitialLoad) showMessage(errorMessage, 'error');
@@ -168,6 +170,147 @@ async function loadInitialData(isInitialLoad = false) {
         document.body.style.cursor = 'default';
     }
 }
+
+/**
+ * =================================================================================
+ * [BARU] FUNGSI NOTIFIKASI WHATSAPP (WAHA)
+ * =================================================================================
+ */
+
+/**
+ * Mengirimkan notifikasi WhatsApp menggunakan WAHA API.
+ * @param {string} salesName - Nama sales yang akan dikirimi pesan.
+ * @param {string} message - Isi pesan yang akan dikirim.
+ */
+async function sendWahaNotification(salesName, message) {
+    // !!! GANTI DENGAN KONFIGURASI WAHA ANDA !!!
+    const WAHA_API_URL = 'https://waha-a2az7kqo.wax.web.id/api/sendText'; // GANTI DENGAN URL WAHA ANDA
+    const WAHA_SESSION_NAME = 'StayvieTest1';         // GANTI DENGAN NAMA SESI WAHA ANDA
+    const WAHA_API_KEY = 'MrJM4bvDRdoA0ETbO0tqV0U4ZzlfL7DJ';  // GANTI DENGAN API KEY WAHA ANDA (JIKA ADA)
+
+    try {
+        // 1. Dapatkan nomor telepon sales dari Firestore
+        const usersQuery = await db.collection('Users').where('name', '==', salesName).limit(1).get();
+        if (usersQuery.empty) {
+            console.error(`Tidak dapat menemukan user dengan nama: ${salesName}`);
+            return;
+        }
+        const userData = usersQuery.docs[0].data();
+        const phoneNumber = userData.phone; // Pastikan ada field 'phone' di koleksi 'Users'
+
+        if (!phoneNumber) {
+            console.error(`Nomor telepon tidak ditemukan untuk sales: ${salesName}`);
+            return;
+        }
+
+        const chatId = `${phoneNumber}@c.us`;
+
+        // 2. Kirim pesan menggunakan WAHA API sesuai dokumentasi
+        const response = await fetch(`${WAHA_API_URL}/api/sendText`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': WAHA_API_KEY // Hapus baris ini jika tidak menggunakan API Key
+            },
+            body: JSON.stringify({
+                chatId: chatId,
+                text: message,
+                session: WAHA_SESSION_NAME
+            })
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            console.log(`Notifikasi berhasil dikirim ke ${salesName}:`, result);
+            showMessage(`Notifikasi WA terkirim ke ${salesName}.`, 'success');
+        } else {
+            throw new Error(result.message || 'Gagal mengirim pesan via WAHA.');
+        }
+
+    } catch (error) {
+        console.error('Gagal mengirim notifikasi WAHA:', error);
+        showMessage(`Gagal mengirim notifikasi WA ke ${salesName}.`, 'error');
+    }
+}
+
+/**
+ * Memeriksa pencapaian target dan mengirim notifikasi jika tercapai.
+ * Mencegah pengiriman notifikasi berulang untuk pencapaian yang sama.
+ */
+async function checkTargetAchievementAndNotify() {
+    if (!allData.kpiSettings || !allSalesUsers) return;
+
+    const kpiSettings = allData.kpiSettings || {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const salesName of allSalesUsers) {
+        // --- Cek Target Harian ---
+        const dailyTargets = TARGET_CONFIG.daily;
+        for (const target of dailyTargets) {
+            if (kpiSettings[target.id] === false) continue;
+
+            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved'])
+                .filter(d => d && new Date(d.timestamp).toDateString() === today.toDateString()).length;
+            
+            const notificationId = `notif_${salesName}_${target.id}_${today.toISOString().split('T')[0]}`;
+            const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
+            if (achievedToday >= target.target) {
+                const notifDoc = await notifDocRef.get();
+                if (!notifDoc.exists) {
+                    const message = `🎉 Selamat ${salesName}! Anda telah mencapai target harian "${target.name}" (${achievedToday}/${target.target}). Terus pertahankan kinerjanya!`;
+                    await sendWahaNotification(salesName, message);
+                    await notifDocRef.set({ sentAt: new Date(), sales: salesName, targetId: target.id, type: 'daily' });
+                }
+            }
+        }
+
+        // --- Cek Target Mingguan ---
+        const weekStart = getWeekStart(today);
+        const weeklyTargets = TARGET_CONFIG.weekly;
+        for (const target of weeklyTargets) {
+             if (kpiSettings[target.id] === false) continue;
+            
+            const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved'])
+                .filter(d => { if(!d) return false; const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= today; }).length;
+
+            const notificationId = `notif_${salesName}_${target.id}_week_${weekStart.toISOString().split('T')[0]}`;
+            const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
+            if (achievedThisWeek >= target.target) {
+                const notifDoc = await notifDocRef.get();
+                 if (!notifDoc.exists) {
+                    const message = `🏆 Hebat ${salesName}! Anda telah mencapai target mingguan "${target.name}" (${achievedThisWeek}/${target.target}). Semangat untuk minggu ini!`;
+                    await sendWahaNotification(salesName, message);
+                    await notifDocRef.set({ sentAt: new Date(), sales: salesName, targetId: target.id, type: 'weekly' });
+                }
+            }
+        }
+
+        // --- Cek Target Bulanan ---
+        const monthlyTargets = TARGET_CONFIG.monthly;
+        const periodIdentifier = `${getPeriodStartDate().getFullYear()}-${getPeriodStartDate().getMonth()}`;
+        for (const target of monthlyTargets) {
+            if (kpiSettings[target.id] === false) continue;
+
+            const achievedThisPeriod = getFilteredData(salesName, target.dataKey, ['Approved']).length;
+            
+            const notificationId = `notif_${salesName}_${target.id}_month_${periodIdentifier}`;
+            const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
+            if (achievedThisPeriod >= target.target) {
+                const notifDoc = await notifDocRef.get();
+                if (!notifDoc.exists) {
+                    const message = `🌟 Luar Biasa ${salesName}! Anda telah mencapai target bulanan "${target.name}" (${achievedThisPeriod}/${target.target}). Kinerja yang sangat baik bulan ini!`;
+                    await sendWahaNotification(salesName, message);
+                    await notifDocRef.set({ sentAt: new Date(), sales: salesName, targetId: target.id, type: 'monthly' });
+                }
+            }
+        }
+    }
+}
+
 
 // =================================================================================
 // PUSAT VALIDASI (VERSI FIREBASE)
@@ -550,7 +693,6 @@ function isDayOff(date, salesName) {
     return timeOffData.some(off => off && off.date === dateString && (off.sales === 'Global' || off.sales === salesName));
 }
 
-// [REVISI] Fungsi ini sekarang menggunakan carousel mingguan
 function renderTabbedTargetSummary() {
     const tabsContainer = document.getElementById('tabsContainer');
     const contentContainer = document.getElementById('tabContentContainer');
@@ -564,7 +706,6 @@ function renderTabbedTargetSummary() {
     const weekDates = periodDates.slice(managementReportWeekOffset * 7, (managementReportWeekOffset * 7) + 7);
     const kpiSettings = allData.kpiSettings || {};
 
-    // Buat ulang tabs hanya jika belum ada
     if (tabsContainer.children.length === 0) {
         allSalesUsers.forEach((salesName, index) => {
             const contentId = `content-${salesName.replace(/\s+/g, '')}`;
@@ -581,7 +722,6 @@ function renderTabbedTargetSummary() {
         });
     }
 
-    // Update konten tabel untuk setiap sales
     allSalesUsers.forEach(salesName => {
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
         const tableContainer = document.querySelector(`#${contentId} .performance-table`);
@@ -623,7 +763,6 @@ function renderTabbedTargetSummary() {
         tableContainer.innerHTML = tableHeader + tableBody;
     });
 
-    // Update navigasi carousel
     document.getElementById('managementPrevWeekBtn').disabled = (managementReportWeekOffset === 0);
     const totalWeeks = Math.ceil(periodDates.length / 7);
     document.getElementById('managementNextWeekBtn').disabled = (managementReportWeekOffset >= totalWeeks - 1);
@@ -892,12 +1031,11 @@ function initializeApp() {
         });
     });
     setupFilters(() => {
-        managementReportWeekOffset = 0; // Reset offset saat filter berubah
+        managementReportWeekOffset = 0;
         loadInitialData(false);
     });
     loadInitialData(true);
 
-    // [BARU] Event listener untuk carousel
     document.getElementById('managementPrevWeekBtn').addEventListener('click', () => {
         if (managementReportWeekOffset > 0) {
             managementReportWeekOffset--;
