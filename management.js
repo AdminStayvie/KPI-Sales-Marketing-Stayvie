@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase dengan notifikasi WAHA.
- * @version 8.0.0 - Added WAHA notification for target achievements.
+ * @version 8.1.0 - Added sorting for validation center entries.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -865,6 +865,10 @@ function renderValidationTabs(data) {
                     <table class="validation-table">
                         <thead><tr><th>Waktu</th><th>Detail Utama</th><th>Aksi</th></tr></thead>
                         <tbody>`;
+            
+            // [MODIFIKASI] Tambahkan pengurutan data berdasarkan timestamp
+            items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
             items.forEach(item => {
                 const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
                 tableHTML += `
