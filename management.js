@@ -1,7 +1,7 @@
 /**
  * @file management.js
  * @description Logika untuk dashboard manajemen, diadaptasi untuk Firebase dengan notifikasi WAHA.
- * @version 9.2.0 - [MODIFIED] Mengubah urutan sorting di Pusat Validasi menjadi ascending (terlama ke terbaru) dan menambahkan pengaturan cutoff.
+ * @version 8.2.0 - [ADDED] Fitur collapse/expand di pusat validasi.
  */
 
 // --- PENJAGA HALAMAN & INISIALISASI PENGGUNA ---
@@ -116,7 +116,6 @@ async function loadInitialData(isInitialLoad = false) {
         const settingsPromises = [
             db.collection('settings').doc('kpi').get(),
             db.collection('settings').doc('timeOff').get(),
-            db.collection('settings').doc('cutoff').get(),
             db.collection('Users').where('role', '==', 'sales').get()
         ];
         
@@ -143,22 +142,18 @@ async function loadInitialData(isInitialLoad = false) {
             }
         });
         
-        const kpiSettingsDoc = results[results.length - 4];
+        const kpiSettingsDoc = results[results.length - 3];
         allData.kpiSettings = kpiSettingsDoc.exists ? kpiSettingsDoc.data() : {};
 
-        const timeOffDoc = results[results.length - 3];
+        const timeOffDoc = results[results.length - 2];
         allData.timeOff = timeOffDoc.exists ? (timeOffDoc.data().entries || []) : [];
         
-        const cutoffDoc = results[results.length - 2];
-        allData.cutoffSettings = cutoffDoc.exists ? cutoffDoc.data() : { isEnabled: false, time: '16:00' };
-
         const usersSnapshot = results[results.length - 1];
         allSalesUsers = usersSnapshot.docs.map(doc => doc.data().name);
 
         if (isInitialLoad) {
             setupTimeOffForm();
             renderKpiSettings();
-            renderCutoffSettings();
         }
         updateAllUI();
         if (isInitialLoad) showMessage("Data berhasil dimuat.", "success");
@@ -175,54 +170,76 @@ async function loadInitialData(isInitialLoad = false) {
     }
 }
 
-// =================================================================================
-// FUNGSI NOTIFIKASI WHATSAPP (WAHA)
-// =================================================================================
+/**
+ * =================================================================================
+ * [BARU] FUNGSI NOTIFIKASI WHATSAPP (WAHA)
+ * =================================================================================
+ */
 async function sendWahaNotification(salesName, message) {
     const WAHA_API_URL = 'https://waha-a2az7kqo.wax.web.id/api/sendText';
     const WAHA_SESSION_NAME = 'StayvieTest1';
     const WAHA_API_KEY = 'MrJM4bvDRdoA0ETbO0tqV0U4ZzlfL7DJ';
+
     try {
         const usersQuery = await db.collection('Users').where('name', '==', salesName).limit(1).get();
         if (usersQuery.empty) {
-            console.error(`User not found: ${salesName}`);
+            console.error(`Tidak dapat menemukan user dengan nama: ${salesName}`);
             return;
         }
         const userData = usersQuery.docs[0].data();
         const phoneNumber = userData.phone;
+
         if (!phoneNumber) {
-            console.error(`Phone number not found for ${salesName}`);
+            console.error(`Nomor telepon tidak ditemukan untuk sales: ${salesName}`);
             return;
         }
+
         const chatId = `${phoneNumber}@c.us`;
-        const response = await fetch(WAHA_API_URL, {
+
+        const response = await fetch(`${WAHA_API_URL}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Api-Key': WAHA_API_KEY },
-            body: JSON.stringify({ chatId: chatId, text: message, session: WAHA_SESSION_NAME })
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': WAHA_API_KEY
+            },
+            body: JSON.stringify({
+                chatId: chatId,
+                text: message,
+                session: WAHA_SESSION_NAME
+            })
         });
+
         const result = await response.json();
         if (response.ok) {
-            console.log(`Notification sent to ${salesName}:`, result);
+            console.log(`Notifikasi berhasil dikirim ke ${salesName}:`, result);
         } else {
-            throw new Error(result.message || 'Failed to send WAHA message.');
+            throw new Error(result.message || 'Gagal mengirim pesan via WAHA.');
         }
+
     } catch (error) {
-        console.error('Failed to send WAHA notification:', error);
+        console.error('Gagal mengirim notifikasi WAHA:', error);
     }
 }
 
 async function checkTargetAchievementAndNotify() {
     if (!allData.kpiSettings || !allSalesUsers) return;
+
     const kpiSettings = allData.kpiSettings || {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     for (const salesName of allSalesUsers) {
+        // --- Cek Target Harian ---
         const dailyTargets = TARGET_CONFIG.daily;
         for (const target of dailyTargets) {
             if (kpiSettings[target.id] === false) continue;
-            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => d && new Date(d.timestamp).toDateString() === today.toDateString()).length;
+
+            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved'])
+                .filter(d => d && new Date(d.timestamp).toDateString() === today.toDateString()).length;
+            
             const notificationId = `notif_${salesName}_${target.id}_${today.toISOString().split('T')[0]}`;
             const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
             if (achievedToday >= target.target) {
                 const notifDoc = await notifDocRef.get();
                 if (!notifDoc.exists) {
@@ -232,13 +249,19 @@ async function checkTargetAchievementAndNotify() {
                 }
             }
         }
+
+        // --- Cek Target Mingguan ---
         const weekStart = getWeekStart(today);
         const weeklyTargets = TARGET_CONFIG.weekly;
         for (const target of weeklyTargets) {
              if (kpiSettings[target.id] === false) continue;
-            const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= today; }).length;
+            
+            const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved'])
+                .filter(d => { if(!d) return false; const itemDate = new Date(d.timestamp); return itemDate >= weekStart && itemDate <= today; }).length;
+
             const notificationId = `notif_${salesName}_${target.id}_week_${weekStart.toISOString().split('T')[0]}`;
             const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
             if (achievedThisWeek >= target.target) {
                 const notifDoc = await notifDocRef.get();
                  if (!notifDoc.exists) {
@@ -248,13 +271,18 @@ async function checkTargetAchievementAndNotify() {
                 }
             }
         }
+
+        // --- Cek Target Bulanan ---
         const monthlyTargets = TARGET_CONFIG.monthly;
         const periodIdentifier = `${getPeriodStartDate().getFullYear()}-${getPeriodStartDate().getMonth()}`;
         for (const target of monthlyTargets) {
             if (kpiSettings[target.id] === false) continue;
+
             const achievedThisPeriod = getFilteredData(salesName, target.dataKey, ['Approved']).length;
+            
             const notificationId = `notif_${salesName}_${target.id}_month_${periodIdentifier}`;
             const notifDocRef = db.collection('notifications_sent').doc(notificationId);
+
             if (achievedThisPeriod >= target.target) {
                 const notifDoc = await notifDocRef.get();
                 if (!notifDoc.exists) {
@@ -267,9 +295,11 @@ async function checkTargetAchievementAndNotify() {
     }
 }
 
+
 // =================================================================================
 // PUSAT VALIDASI (VERSI FIREBASE)
 // =================================================================================
+
 async function loadPendingEntries() {
     const tabsContainer = document.getElementById('validationTabsContainer');
     const contentContainer = document.getElementById('validationTabContentContainer');
@@ -280,11 +310,13 @@ async function loadPendingEntries() {
     document.body.style.cursor = 'wait';
 
     try {
-        pendingEntries = {};
+        pendingEntries = {}; // Reset
         const collectionsToFetch = Object.keys(CONFIG.dataMapping);
+        
         const fetchPromises = collectionsToFetch.map(collectionName => 
             db.collection(collectionName).where('validationStatus', '==', 'Pending').get()
         );
+        
         const snapshots = await Promise.all(fetchPromises);
         
         snapshots.forEach((snapshot, index) => {
@@ -317,20 +349,33 @@ async function handleValidation(buttonElement, sheetName, id, type) {
             return;
         }
     }
+
     const actionCell = buttonElement.parentElement;
     actionCell.querySelectorAll('button').forEach(btn => btn.disabled = true);
     showMessage('Memproses validasi...', 'info');
+
     const docRef = db.collection(sheetName).doc(id);
+
     try {
+        const preCheckDoc = await docRef.get();
+        if (!preCheckDoc.exists) {
+            throw new Error("Dokumen tidak ditemukan saat pemeriksaan awal. Data mungkin sudah tidak valid. Silakan refresh.");
+        }
+
         await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(docRef);
-            if (!doc.exists) throw new Error("Dokumen tidak ditemukan.");
+            if (!doc.exists) {
+                throw new Error("Dokumen tidak ditemukan di dalam transaksi. Terjadi konflik, coba lagi.");
+            }
+
             transaction.update(docRef, {
                 validationStatus: type === 'approve' ? 'Approved' : 'Rejected',
                 validationNotes: notes
             });
         });
+
         showMessage('Validasi berhasil disimpan.', 'success');
+        
         const row = actionCell.parentElement;
         row.style.transition = 'opacity 0.5s ease';
         row.style.opacity = '0';
@@ -339,6 +384,7 @@ async function handleValidation(buttonElement, sheetName, id, type) {
             loadPendingEntries(); 
             loadInitialData(); 
         }, 500);
+
     } catch (error) {
         showMessage(`Gagal memproses validasi: ${error.message}`, 'error');
         console.error("Validation failed:", error);
@@ -346,23 +392,39 @@ async function handleValidation(buttonElement, sheetName, id, type) {
     }
 }
 
+
 // =================================================================================
 // FUNGSI EKSPOR DATA
 // =================================================================================
+
 function convertToCsv(dataArray) {
-    if (!dataArray || dataArray.length === 0) return "";
+    if (!dataArray || dataArray.length === 0) {
+        return "";
+    }
+
     const headers = Object.keys(dataArray[0]);
-    const csvRows = [headers.join(',')];
+    const csvRows = [];
+    
+    csvRows.push(headers.join(','));
+
     for (const row of dataArray) {
         const values = headers.map(header => {
             let cell = row[header] === null || row[header] === undefined ? '' : row[header];
-            if (typeof cell === 'object') cell = JSON.stringify(cell);
-            else cell = String(cell);
-            if (cell.includes('"') || cell.includes(',')) cell = `"${cell.replace(/"/g, '""')}"`;
+            
+            if (typeof cell === 'object') {
+                cell = JSON.stringify(cell);
+            } else {
+                cell = String(cell);
+            }
+
+            if (cell.includes('"') || cell.includes(',')) {
+                cell = `"${cell.replace(/"/g, '""')}"`;
+            }
             return cell;
         });
         csvRows.push(values.join(','));
     }
+
     return csvRows.join('\n');
 }
 
@@ -371,32 +433,41 @@ async function exportAllDataAsZip() {
     const exportBtn = document.getElementById('exportDataBtn');
     exportBtn.disabled = true;
     exportBtn.textContent = 'Memproses...';
+
     try {
         const zip = new JSZip();
         let fileCount = 0;
+
         for (const collectionName in CONFIG.dataMapping) {
             const dataKey = CONFIG.dataMapping[collectionName].dataKey;
             const data = allData[dataKey];
+
             if (data && data.length > 0) {
                 const csvContent = convertToCsv(data);
                 zip.file(`${collectionName}.csv`, csvContent);
                 fileCount++;
             }
         }
+
         if (fileCount === 0) {
             showMessage('Tidak ada data untuk diekspor pada periode ini.', 'warning');
             return;
         }
+
         const zipContent = await zip.generateAsync({ type: 'blob' });
+        
         const link = document.createElement('a');
         link.href = URL.createObjectURL(zipContent);
         const period = document.getElementById('periodFilter').options[document.getElementById('periodFilter').selectedIndex].text.replace(/\s/g, '');
         const year = document.getElementById('yearFilter').value;
         link.download = `LaporanKPI_${year}_${period}.zip`;
+        
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
         showMessage('Unduhan berhasil disiapkan!', 'success');
+
     } catch (error) {
         showMessage(`Gagal mengekspor data: ${error.message}`, 'error');
         console.error("Export Error:", error);
@@ -406,71 +477,27 @@ async function exportAllDataAsZip() {
     }
 }
 
+
 // =================================================================================
 // PENGATURAN (VERSI FIREBASE)
 // =================================================================================
-function renderCutoffSettings() {
-    const container = document.getElementById('cutoffSettingsContainer');
-    if (!container) return;
-    const settings = allData.cutoffSettings || { isEnabled: false, time: '16:00' };
-    container.innerHTML = `
-        <div class="setting-item">
-            <div class="setting-info">
-                <div class="setting-name">Aktifkan Batas Waktu</div>
-                <div class="setting-description">Jika aktif, input target harian akan ditolak setelah jam cutoff.</div>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="cutoffToggle" ${settings.isEnabled ? 'checked' : ''}>
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-        <div class="setting-item">
-            <div class="setting-info">
-                <div class="setting-name">Jam Batas Waktu (Cutoff)</div>
-                <div class="setting-description">Format 24 jam, contoh: 16:00 untuk jam 4 sore.</div>
-            </div>
-            <input type="time" id="cutoffTime" class="form-control" value="${settings.time}" style="max-width: 120px;">
-        </div>
-        <div style="text-align: right; margin-top: 8px;">
-            <button id="saveCutoffSettingsBtn" class="btn btn--primary">Simpan Pengaturan Cutoff</button>
-        </div>
-    `;
-    document.getElementById('saveCutoffSettingsBtn').addEventListener('click', handleSaveCutoffSettings);
-}
-
-async function handleSaveCutoffSettings() {
-    const isEnabled = document.getElementById('cutoffToggle').checked;
-    const time = document.getElementById('cutoffTime').value;
-    if (!time) {
-        showMessage('Jam batas waktu tidak boleh kosong.', 'error');
-        return;
-    }
-    const button = document.getElementById('saveCutoffSettingsBtn');
-    button.disabled = true;
-    button.textContent = 'Menyimpan...';
-    try {
-        await db.collection('settings').doc('cutoff').set({ isEnabled: isEnabled, time: time });
-        showMessage('Pengaturan batas waktu berhasil disimpan.', 'success');
-        allData.cutoffSettings = { isEnabled, time };
-    } catch (error) {
-        showMessage(`Gagal menyimpan pengaturan: ${error.message}`, 'error');
-    } finally {
-        button.disabled = false;
-        button.textContent = 'Simpan Pengaturan Cutoff';
-    }
-}
 
 async function handleKpiSettingChange(event) {
     const toggle = event.target;
     const targetId = toggle.dataset.targetId;
     const isActive = toggle.checked;
     toggle.disabled = true;
+
     try {
-        await db.collection('settings').doc('kpi').set({ [targetId]: isActive }, { merge: true });
+        await db.collection('settings').doc('kpi').set({
+            [targetId]: isActive
+        }, { merge: true });
+        
         showMessage('Pengaturan KPI berhasil diperbarui.', 'success');
         if (!allData.kpiSettings) allData.kpiSettings = {};
         allData.kpiSettings[targetId] = isActive;
         updateAllUI();
+
     } catch (error) {
         showMessage(`Gagal menyimpan pengaturan: ${error.message}`, 'error');
         toggle.checked = !isActive;
@@ -489,12 +516,16 @@ async function handleTimeOffSubmit(e) {
         showMessage('Tanggal dan Keterangan wajib diisi.', 'error'); 
         return; 
     }
+
     const newEntry = { date, sales, description, id: `timeoff_${Date.now()}` };
     const submitButton = form.querySelector('button[type="submit"]');
     submitButton.disabled = true; submitButton.textContent = 'Menyimpan...';
+
     try {
         const docRef = db.collection('settings').doc('timeOff');
-        await docRef.update({ entries: firebase.firestore.FieldValue.arrayUnion(newEntry) });
+        await docRef.update({
+            entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
+        });
         showMessage('Data libur berhasil disimpan.', 'success');
         await loadInitialData(); 
         form.reset();
@@ -514,11 +545,13 @@ async function handleTimeOffSubmit(e) {
 
 async function handleDeleteTimeOff(id) {
     if (!confirm('Anda yakin ingin menghapus data ini?')) return;
+    
     const entryToDelete = (allData.timeOff || []).find(item => item.id === id);
     if (!entryToDelete) {
         showMessage('Data tidak ditemukan untuk dihapus.', 'error');
         return;
     }
+
     try {
         await db.collection('settings').doc('timeOff').update({
             entries: firebase.firestore.FieldValue.arrayRemove(entryToDelete)
@@ -533,8 +566,11 @@ async function handleDeleteTimeOff(id) {
 // =================================================================================
 // SEMUA FUNGSI UI LAINNYA
 // =================================================================================
+
 function updateAllUI() {
-    if (!allData.kpiSettings || !allSalesUsers || allSalesUsers.length === 0) return;
+    if (!allData.kpiSettings || !allSalesUsers || allSalesUsers.length === 0) {
+        return;
+    }
     try {
         const penalties = calculatePenalties();
         updateStatCards(penalties);
@@ -564,6 +600,7 @@ function updateStatCards(penalties) {
     const approvedCanvasing = (allData.canvasing || []).filter(d => d && d.validationStatus && d.validationStatus.toLowerCase() === 'approved');
     document.getElementById('totalLeads').textContent = approvedLeads.length;
     document.getElementById('totalCanvasing').textContent = approvedCanvasing.length;
+    
     const salesPerformance = {};
     allSalesUsers.forEach(salesName => {
         salesPerformance[salesName] = ALL_DATA_KEYS.reduce((total, key) => total + getFilteredData(salesName, key, ['Approved']).length, 0);
@@ -592,18 +629,23 @@ function calculatePenalties() {
     const datesToCheck = getDatesForPeriod().filter(date => date < today);
     const periodStartDate = getPeriodStartDate();
     const periodEndDate = getPeriodEndDate();
+
     if (today < periodStartDate) return penalties;
+
     allSalesUsers.forEach(salesName => {
         penalties.bySales[salesName] = 0;
+        
         TARGET_CONFIG.daily.forEach(target => {
             if (kpiSettings[target.id] === false) return;
             datesToCheck.forEach(date => {
                 if (!isDayOff(date, salesName)) {
-                    const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
+                    const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved'])
+                        .filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
                     if (achievedToday < target.target) penalties.bySales[salesName] += target.penalty;
                 }
             });
         });
+
         const sundaysInPeriod = datesToCheck.filter(date => date.getDay() === 0);
         TARGET_CONFIG.weekly.forEach(target => {
             if (kpiSettings[target.id] === false) return;
@@ -613,6 +655,7 @@ function calculatePenalties() {
                 if (achievedThisWeek < target.target) penalties.bySales[salesName] += target.penalty;
             });
         });
+
         if (today > periodEndDate) {
             TARGET_CONFIG.monthly.forEach(target => {
                 if (kpiSettings[target.id] === false) return;
@@ -621,6 +664,7 @@ function calculatePenalties() {
             });
         }
     });
+
     penalties.total = Object.values(penalties.bySales).reduce((sum, p) => sum + p, 0);
     return penalties;
 }
@@ -637,6 +681,7 @@ function renderTabbedTargetSummary() {
     const tabsContainer = document.getElementById('tabsContainer');
     const contentContainer = document.getElementById('tabContentContainer');
     if (!tabsContainer || !contentContainer) return;
+
     const periodDates = getDatesForPeriod();
     if (periodDates.length === 0) {
         contentContainer.innerHTML = '<div class="empty-state">Pilih periode untuk melihat laporan.</div>';
@@ -644,6 +689,7 @@ function renderTabbedTargetSummary() {
     }
     const weekDates = periodDates.slice(managementReportWeekOffset * 7, (managementReportWeekOffset * 7) + 7);
     const kpiSettings = allData.kpiSettings || {};
+
     if (tabsContainer.children.length === 0) {
         allSalesUsers.forEach((salesName, index) => {
             const contentId = `content-${salesName.replace(/\s+/g, '')}`;
@@ -659,37 +705,50 @@ function renderTabbedTargetSummary() {
             });
         });
     }
+
     allSalesUsers.forEach(salesName => {
         const contentId = `content-${salesName.replace(/\s+/g, '')}`;
         const tableContainer = document.querySelector(`#${contentId} .performance-table`);
         if (!tableContainer) return;
-        let tableHeader = '<thead><tr><th>Target</th>';
+
+        let tableHeader = `<thead><tr><th>Target (Target)</th>`;
         weekDates.forEach(date => { tableHeader += `<th>${date.getDate()}</th>`; });
         tableHeader += '</tr></thead>';
+        
         let tableBody = '<tbody>';
         ['daily', 'weekly', 'monthly'].forEach(period => {
             TARGET_CONFIG[period].forEach(target => {
                 if (kpiSettings[target.id] === false) return;
-                tableBody += `<tr><td>${target.name} (${period.charAt(0)})</td>`;
+                tableBody += `<tr><td>${target.name} (${target.target})</td>`;
                 weekDates.forEach(date => {
-                    let cellContent = '';
-                    let cellClass = '';
+                    let cellContent = '-';
                     if (period === 'daily') {
-                        if (isDayOff(date, salesName)) {
-                            cellClass = 'off-day';
-                        } else {
-                            const achievedToday = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => d && new Date(d.timestamp).toDateString() === date.toDateString()).length;
-                            cellContent = achievedToday >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
+                        if (!isDayOff(date, salesName)) {
+                            const dailyData = (allData[target.dataKey] || []).filter(d => d && d.sales === salesName && new Date(d.timestamp).toDateString() === date.toDateString());
+                            const p = dailyData.filter(d => d.validationStatus.toLowerCase() === 'pending').length;
+                            const a = dailyData.filter(d => d.validationStatus.toLowerCase() === 'approved').length;
+                            const r = dailyData.filter(d => d.validationStatus.toLowerCase() === 'rejected').length;
+                            cellContent = `<span class="par-cell"><span class="par-p">${p}</span>/<span class="par-a">${a}</span>/<span class="par-r">${r}</span></span>`;
                         }
                     } else if (period === 'weekly' && date.getDay() === 0) {
                         const weekStart = getWeekStart(date);
-                        const achievedThisWeek = getFilteredData(salesName, target.dataKey, ['Approved']).filter(d => { if(!d) return false; const dDate = new Date(d.timestamp); return dDate >= weekStart && dDate <= date; }).length;
-                        cellContent = achievedThisWeek >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
+                        const weeklyData = (allData[target.dataKey] || []).filter(d => {
+                            if (!d || d.sales !== salesName) return false;
+                            const itemDate = new Date(d.timestamp);
+                            return itemDate >= weekStart && itemDate <= date;
+                        });
+                        const p = weeklyData.filter(d => d.validationStatus.toLowerCase() === 'pending').length;
+                        const a = weeklyData.filter(d => d.validationStatus.toLowerCase() === 'approved').length;
+                        const r = weeklyData.filter(d => d.validationStatus.toLowerCase() === 'rejected').length;
+                        cellContent = `<span class="par-cell"><span class="par-p">${p}</span>/<span class="par-a">${a}</span>/<span class="par-r">${r}</span></span>`;
                     } else if (period === 'monthly' && date.getDate() === getPeriodEndDate().getDate()) {
-                        const achievedThisMonth = getFilteredData(salesName, target.dataKey, ['Approved']).length;
-                        cellContent = achievedThisMonth >= target.target ? '<span class="check-mark">✓</span>' : '<span class="cross-mark">✗</span>';
+                         const monthlyData = (allData[target.dataKey] || []).filter(d => d.sales === salesName);
+                         const p = monthlyData.filter(d => d.validationStatus.toLowerCase() === 'pending').length;
+                         const a = monthlyData.filter(d => d.validationStatus.toLowerCase() === 'approved').length;
+                         const r = monthlyData.filter(d => d.validationStatus.toLowerCase() === 'rejected').length;
+                         cellContent = `<span class="par-cell"><span class="par-p">${p}</span>/<span class="par-a">${a}</span>/<span class="par-r">${r}</span></span>`;
                     }
-                    tableBody += `<td class="${cellClass}">${cellContent}</td>`;
+                    tableBody += `<td>${cellContent}</td>`;
                 });
                 tableBody += '</tr>';
             });
@@ -697,6 +756,7 @@ function renderTabbedTargetSummary() {
         tableBody += '</tbody>';
         tableContainer.innerHTML = tableHeader + tableBody;
     });
+
     document.getElementById('managementPrevWeekBtn').disabled = (managementReportWeekOffset === 0);
     const totalWeeks = Math.ceil(periodDates.length / 7);
     document.getElementById('managementNextWeekBtn').disabled = (managementReportWeekOffset >= totalWeeks - 1);
@@ -704,6 +764,7 @@ function renderTabbedTargetSummary() {
     const endRange = weekDates.length > 0 ? weekDates[weekDates.length - 1].toLocaleDateString('id-ID', {day: '2-digit', month: 'short'}) : '';
     document.getElementById('managementWeekRangeLabel').textContent = startRange && endRange ? `${startRange} - ${endRange}` : '...';
 }
+
 
 function updateTeamValidationBreakdown() {
     const container = document.getElementById('teamValidationBreakdown');
@@ -744,8 +805,10 @@ function renderValidationTabs(data) {
     const contentContainer = document.getElementById('validationTabContentContainer');
     tabsContainer.innerHTML = '';
     contentContainer.innerHTML = '';
+
     const pendingBySales = {};
     let totalPendingAll = 0;
+
     for (const sheetName in data) {
         data[sheetName].forEach(item => {
             if (!item || !item.sales) return;
@@ -760,6 +823,7 @@ function renderValidationTabs(data) {
             totalPendingAll++;
         });
     }
+
     const pendingBadge = document.getElementById('pendingCountBadge');
     if (totalPendingAll > 0) {
         pendingBadge.textContent = totalPendingAll;
@@ -769,32 +833,37 @@ function renderValidationTabs(data) {
         tabsContainer.innerHTML = '<p class="message success">Tidak ada data yang perlu divalidasi saat ini. Kerja bagus!</p>';
         return;
     }
+
     let isFirstTab = true;
     for (const salesName in pendingBySales) {
         const salesData = pendingBySales[salesName];
         const contentId = `validation-content-${salesName.replace(/\s+/g, '')}`;
+
         const tabButton = document.createElement('button');
         tabButton.className = `tab-button ${isFirstTab ? 'active' : ''}`;
         tabButton.dataset.tab = contentId;
         tabButton.innerHTML = `${salesName} <span class="pending-badge">${salesData.total}</span>`;
         tabsContainer.appendChild(tabButton);
+
         const contentDiv = document.createElement('div');
         contentDiv.id = contentId;
         contentDiv.className = `tab-content ${isFirstTab ? 'active' : ''}`;
+        
         for (const sheetName in salesData.items) {
             const items = salesData.items[sheetName];
             const card = document.createElement('div');
             card.className = 'card';
             let tableHTML = `
-                <div class="card__header"><h3>${sheetName} (${items.length} pending)</h3></div>
+                <div class="card__header">
+                    <h3>${sheetName} (${items.length} pending)</h3>
+                    <button class="collapse-btn" aria-expanded="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                </div>
                 <div class="card__body performance-table-wrapper">
                     <table class="validation-table">
                         <thead><tr><th>Waktu</th><th>Detail Utama</th><th>Aksi</th></tr></thead>
                         <tbody>`;
-            
-            // [MODIFIKASI] Mengurutkan data dari yang terlama ke terbaru (ascending)
-            items.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
             items.forEach(item => {
                 const mainDetail = item.customerName || item.meetingTitle || item.campaignName || item.institutionName || item.competitorName || item.eventName || item.campaignTitle || 'N/A';
                 tableHTML += `
@@ -815,6 +884,19 @@ function renderValidationTabs(data) {
         contentContainer.appendChild(contentDiv);
         isFirstTab = false;
     }
+
+    document.querySelectorAll('#validationTabContentContainer .card__header').forEach(header => {
+        header.addEventListener('click', () => {
+            const card = header.closest('.card');
+            const button = header.querySelector('.collapse-btn');
+            if (!card || !button) return;
+
+            const isCurrentlyExpanded = !card.classList.contains('is-collapsed');
+            card.classList.toggle('is-collapsed');
+            button.setAttribute('aria-expanded', !isCurrentlyExpanded);
+        });
+    });
+
     document.querySelectorAll('#validationTabsContainer .tab-button').forEach(button => {
         button.addEventListener('click', () => {
             document.querySelectorAll('#validationTabsContainer .tab-button').forEach(btn => btn.classList.remove('active'));
@@ -827,32 +909,42 @@ function renderValidationTabs(data) {
 
 function closeDetailModal() {
     const modal = document.getElementById('managementDetailModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 function openDetailModal(itemId, sheetName) {
     const items = pendingEntries[sheetName] || [];
     const item = items.find(d => d && d.id === itemId);
     const mapping = CONFIG.dataMapping[sheetName];
+
     if (!item || !mapping) {
         console.error("Data atau mapping tidak ditemukan untuk modal:", itemId, sheetName);
+        showMessage("Tidak dapat menampilkan detail data.", "error");
         return;
     }
+
     const modal = document.getElementById('managementDetailModal');
     const modalTitle = document.getElementById('managementDetailModalTitle');
     const modalBody = document.getElementById('managementDetailModalBody');
     if(!modal || !modalTitle || !modalBody) return;
+    
     modalTitle.textContent = `Detail Data - ${sheetName}`;
     modalBody.innerHTML = '';
+
     const detailList = document.createElement('dl');
     detailList.className = 'detail-list';
     const dateFields = ['timestamp', 'visitDate', 'surveyDate', 'eventDate', 'campaignStartDate', 'campaignEndDate'];
+
     for (const key in mapping.detailLabels) {
         if (Object.prototype.hasOwnProperty.call(item, key) && (item[key] || item[key] === 0 || typeof item[key] === 'string')) {
             const dt = document.createElement('dt');
             dt.textContent = mapping.detailLabels[key];
+            
             const dd = document.createElement('dd');
             let value = item[key];
+
             if (key === 'timestamp') value = item.datestamp || formatDate(item.timestamp);
             else if (dateFields.includes(key)) value = formatDate(value);
             else if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('budget') || key.toLowerCase().includes('value')) value = formatCurrency(value);
@@ -863,11 +955,13 @@ function openDetailModal(itemId, sheetName) {
                  dd.innerHTML = `<a href="${value}" target="_blank" rel="noopener noreferrer">Lihat File/Link</a>`;
                 detailList.appendChild(dt); detailList.appendChild(dd); continue;
             }
+            
             dd.textContent = value;
             detailList.appendChild(dt);
             detailList.appendChild(dd);
         }
     }
+    
     modalBody.appendChild(detailList);
     modal.classList.add('active');
 }
@@ -952,12 +1046,14 @@ function initializeApp() {
         loadInitialData(false);
     });
     loadInitialData(true);
+
     document.getElementById('managementPrevWeekBtn').addEventListener('click', () => {
         if (managementReportWeekOffset > 0) {
             managementReportWeekOffset--;
             renderTabbedTargetSummary();
         }
     });
+
     document.getElementById('managementNextWeekBtn').addEventListener('click', () => {
         const periodDates = getDatesForPeriod();
         const totalWeeks = Math.ceil(periodDates.length / 7);
