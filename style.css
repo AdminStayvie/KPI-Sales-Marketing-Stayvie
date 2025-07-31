@@ -1465,28 +1465,32 @@ input:checked + .toggle-slider:before {
 .btn--revise:hover {
     background-color: var(--color-orange-400);
 }
-/* [NEW] Password Toggle Icon Styles */
-.password-container {
-  position: relative;
+
+/* [BARU] Gaya untuk Collapse/Expand */
+#validationCenter .card__header {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.password-container .form-control {
-  padding-right: 45px; /* Memberi ruang untuk ikon */
+.collapse-btn {
+    background: none;
+    border: none;
+    padding: var(--space-4);
+    cursor: pointer;
+    color: var(--color-text-secondary);
 }
 
-.toggle-password-icon {
-  position: absolute;
-  right: 15px;
-  /* Penyesuaian posisi vertikal agar pas di tengah input field */
-  top: calc(50% + 12px); 
-  transform: translateY(-50%);
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.collapse-btn svg {
+    transition: transform var(--duration-normal) var(--ease-standard);
+    pointer-events: none; /* Mencegah SVG menangkap event klik */
 }
 
-.toggle-password-icon:hover {
-    color: var(--color-text);
+.card.is-collapsed .card__body {
+    display: none;
+}
+
+.card.is-collapsed .collapse-btn svg {
+    transform: rotate(-90deg);
 }
