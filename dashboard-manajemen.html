@@ -23,7 +23,7 @@
         .performance-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .performance-table th, .performance-table td { border: 1px solid var(--color-border); padding: var(--space-8); text-align: center; font-size: var(--font-size-sm); }
         .performance-table th { background-color: var(--color-secondary); font-weight: 500; min-width: 40px; }
-        .performance-table td:first-child { text-align: left; font-weight: 500; background-color: var(--color-secondary); width: 250px; }
+        .performance-table td:first-child { text-align: left; font-weight: 500; background-color: var(--color-secondary); width: 250px; position: sticky; left: 0; z-index: 1;}
         .check-mark { color: var(--color-success); font-weight: bold; }
         .cross-mark { color: var(--color-error); font-weight: bold; }
         .off-day { background-color: var(--color-gray-200) !important; color: var(--color-text-secondary); }
@@ -37,6 +37,7 @@
         .content-page { display: none; }
         .content-page.active { display: block; }
         [data-color-scheme="dark"] .off-day { background-color: var(--color-charcoal-700) !important; }
+        [data-color-scheme="dark"] .performance-table td:first-child { background-color: var(--color-charcoal-700); }
         .admin-settings-grid { display: grid; gap: var(--space-12); }
         .setting-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-12); background-color: var(--color-secondary); border-radius: var(--radius-base); }
         .setting-info { flex: 1; }
@@ -65,6 +66,31 @@
         .detail-list dt { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
         .detail-list dd { margin: 0; word-break: break-word; }
         .detail-list dd a { color: var(--color-primary); }
+        
+        /* [BARU] Gaya untuk Collapse/Expand */
+        #validationCenter .card__header {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .collapse-btn {
+            background: none;
+            border: none;
+            padding: var(--space-4);
+            cursor: pointer;
+            color: var(--color-text-secondary);
+        }
+        .collapse-btn svg {
+            transition: transform var(--duration-normal) var(--ease-standard);
+            pointer-events: none; /* Mencegah SVG menangkap event klik */
+        }
+        .card.is-collapsed .card__body {
+            display: none;
+        }
+        .card.is-collapsed .collapse-btn svg {
+            transform: rotate(-90deg);
+        }
     </style>
 </head>
 <body>
@@ -173,30 +199,8 @@
 
                 <!-- Halaman 4: Pengaturan KPI -->
                 <div id="kpiSettings" class="content-page">
-                    <div class="page-header"><h2>Pengaturan KPI</h2></div>
-                    
-                    <!-- [BARU] Pengaturan Batas Waktu Input -->
-                    <div class="card" style="margin-bottom: var(--space-24);">
-                        <div class="card__header"><h3>Pengaturan Batas Waktu Input Harian</h3></div>
-                        <div class="card__body">
-                            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">
-                                Aktifkan untuk menolak input data target harian (Leads, Prospek, Promosi) setelah melewati jam yang ditentukan.
-                            </p>
-                            <div id="cutoffSettingsContainer" class="admin-settings-grid">
-                                <!-- Konten akan di-render oleh JavaScript -->
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="card__header"><h3>Pengaturan Target KPI Aktif</h3></div>
-                        <div class="card__body">
-                            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard.</p>
-                            <div id="kpiSettingsContainer" class="admin-settings-grid">
-                                <div style="padding: 24px; text-align: center;">Memuat pengaturan...</div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="page-header"><h2>Pengaturan Target KPI Aktif</h2></div>
+                    <div class="card"><div class="card__body"><p style="color: var(--color-text-secondary); margin-bottom: 16px;">Nonaktifkan target KPI untuk menghentikannya dari perhitungan denda dan ringkasan kinerja di semua dashboard. Perubahan akan langsung berlaku.</p><div id="kpiSettingsContainer" class="admin-settings-grid"><div style="padding: 24px; text-align: center;">Memuat pengaturan...</div></div></div></div>
                 </div>
             </main>
         </div>
@@ -218,20 +222,21 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
-            authDomain: "admin-stayvie.firebaseapp.com",
-            projectId: "admin-stayvie",
-            storageBucket: "admin-stayvie.firebasestorage.app",
-            messagingSenderId: "263821398757",
-            appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
-        };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        const storage = firebase.storage();
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyAqU-GvPlgJJgFZiV1u_01HyVUOgCLiD_c",
+  authDomain: "admin-stayvie.firebaseapp.com",
+  projectId: "admin-stayvie",
+  storageBucket: "admin-stayvie.firebasestorage.app",
+  messagingSenderId: "263821398757",
+  appId: "1:263821398757:web:d43aef8e2f825d3c3dba0c"
+};
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+      const storage = firebase.storage();
     </script>
     <script src="utils.js"></script>
     <script src="management.js"></script>
